@@ -2,7 +2,8 @@
 
 const { Contract, Context } = require('fabric-contract-api');
 const Product = require('./product.js');
-const EVENT_TYPE = "productContractEvent";
+const EVENT_NAME = "productContractEvent";
+const Crypto = require('crypto');
 
 class ProductContext extends Context {
     
@@ -22,35 +23,54 @@ class ProductContract extends Contract {
         return new ProductContext();
     }
 
-    async init(ctx) {
-        console.info('============= START : Initialize Ledger ===========');
+    encrypt(data, password){   
+        const cipher = Crypto.createCipher('aes256', password);  
+        let encrypted = cipher.update(data, 'utf8', 'hex');
+        encrypted += cipher.final('hex');   
+        return encrypted;
+    }
+
+    decrypt(cipherData, password)  {    
+        const decipher = Crypto.createDecipher('aes256', password);    
+        let decrypted = decipher.update(cipherData, 'hex', 'utf8');
+        decrypted += decipher.final('utf8');   
+        return decrypted.toString();
+    }
+
+    async initializeProducts(ctx) {
         const products = [
             {
-                productId: '001',
-                companyId: '123123',
+                productCode: '001',
+                companyId: 'Lorem Ipsum',
+                productBrand: 'Lorem Ipsum',
                 productName: 'Lorem Ipsum',
-                productCode: '123123',
                 productPrice: 123123,
+                productOrigin: 'Lorem Ipsum',
+                productReleaseDate: 'Lorem Ipsum',
                 productDescription: 'Lorem Ipsum',
                 productImageHash: 'Lorem Ipsum',
                 productImageLink: 'Lorem Ipsum',
             },
             {
-                productId: '002',
-                companyId: '123123',
+                productCode: '002',
+                companyId: 'Lorem Ipsum',
+                productBrand: 'Lorem Ipsum',
                 productName: 'Lorem Ipsum',
-                productCode: '123123',
                 productPrice: 123123,
+                productOrigin: 'Lorem Ipsum',
+                productReleaseDate: 'Lorem Ipsum',
                 productDescription: 'Lorem Ipsum',
                 productImageHash: 'Lorem Ipsum',
                 productImageLink: 'Lorem Ipsum',
             },
             {
-                productId: '003',
-                companyId: '123123',
+                productCode: '003',
+                companyId: 'Lorem Ipsum',
+                productBrand: 'Lorem Ipsum',
                 productName: 'Lorem Ipsum',
-                productCode: '123123',
                 productPrice: 123123,
+                productOrigin: 'Lorem Ipsum',
+                productReleaseDate: 'Lorem Ipsum',
                 productDescription: 'Lorem Ipsum',
                 productImageHash: 'Lorem Ipsum',
                 productImageLink: 'Lorem Ipsum',
@@ -59,92 +79,93 @@ class ProductContract extends Contract {
 
         for (let i = 0; i < products.length; i++) {
             let product = new Product(
-                products[i].productId, 
-                products[i].companyId,
-                products[i].productName, 
                 products[i].productCode,
-                products[i].productPrice.toString(),
-                products[i].productDescription,
-                products[i].productImageHash,
+                products[i].companyId, 
+                products[i].productBrand, 
+                products[i].productName,  
+                products[i].productPrice,
+                products[i].productOrigin,
+                products[i].productReleaseDate, 
+                products[i].productDescription, 
+                products[i].productImageHash, 
                 products[i].productImageLink
             );
-
-            await ctx.stub.putState(product.productId, product.toBuffer());
             
-            console.info('Added <--> ', products[i]);
+            const cipherProduct = this.encrypt(JSON.stringify(product), 'admin');
+
+            await ctx.stub.putState(product.getProductCode(), Product.toBuffer(cipherProduct));
         }
-        console.info('============= END : Initialize Ledger ===========');
     }
 
     async createProduct(ctx, args) {
-        let userType = await this.getCurrentUserType(ctx);
-        if ((userType != "admin") &&
-            (userType != "company"))
+        const userType = await this.getCurrentUserType(ctx);
+        if ((userType !== "admin") &&
+            (userType !== "company"))
             throw new Error(`This user does not have access to create an product`);
 
-        const product_details = JSON.parse(args);
-        const productId = product_details.productId;
-        console.log("incoming asset fields: " + JSON.stringify(product_details));
+        const productDetails = JSON.parse(args);
 
-        let productAsBytes = await ctx.stub.getState(productId);
-        if (productAsBytes && productAsBytes.length > 0) {
-            throw new Error(`Error Message from createProduct. Product with productId = ${productId} already exists.`);
+        const productBuffer = await ctx.stub.getState(productDetails.productCode);
+        if (productBuffer && productBuffer.length > 0) {
+            throw new Error(`Error Message from createProduct. Product with productCode = ${productDetails.productCode} already exists.`);
         }
 
-        let product = new Product(
-            product_details.productId, 
-            product_details.companyId, 
-            product_details.productName, 
-            product_details.productCode,
-            product_details.productPrice.toString(),
-            product_details.productDescription,
-            product_details.productImageHash,
-            product_details.productImageLink
-        );
+        const product = Product.deserializeProduct(args);
+        const userId = await this.getCurrentUserId(ctx);
+        const cipherProduct = this.encrypt(JSON.stringify(product), userId);
 
-        await ctx.stub.putState(product.productId, product.toBuffer());
+        await ctx.stub.putState(product.getProductCode(), Product.toBuffer(cipherProduct));
 
         try {
-            await ctx.stub.setEvent(EVENT_TYPE, product.toBuffer());
+            await ctx.stub.setEvent(EVENT_NAME, Product.toBuffer(cipherProduct));
         }
         catch (error) {
-            console.log("Error in sending event");
+            console.log("Error in sending createProduct event");
         }
 
-        return product.toBuffer();
+        return {
+            status: 'Successfully create a product',
+            cipherProduct: `${cipherProduct}`
+        };
     }
 
-    async readProduct(ctx, productId) {
-        if (productId.length < 1) {
-            throw new Error('productId is required as input')
+    async readProduct(ctx, productCode) {
+        if (productCode.length < 1) {
+            throw new Error('productCode is required as input')
         }
-        console.log("input, productId = " + productId);
         
-        let productAsBytes = await ctx.stub.getState(productId);
+        const productBuffer = await ctx.stub.getState(productCode);
 
-        if (!productAsBytes || productAsBytes.length === 0) {
-            throw new Error(`Error Message from readProduct. Product with productId = ${productId} does not exists.`);
+        if (!productBuffer || productBuffer.length === 0) {
+            throw new Error(`Error Message from readProduct. Product with productCode = ${productCode} does not exists.`);
         }
         
-        let product = Product.deserialize(productAsBytes);
-        let userId = await this.getCurrentUserId(ctx);
-        if ((userId != "admin")
-            && (userId != product.companyId))
-            throw new Error(`${userId} does not have access to the details of product ${productId}`);
+        const cipherProduct = JSON.parse(productBuffer);
+        const userId = await this.getCurrentUserId(ctx);
+        const decipherProduct = this.decrypt(cipherProduct, userId);
+        const product = Product.deserializeProduct(decipherProduct);
+
+        if ((userId !== "admin")
+            && (userId !== product.getCompanyId()))
+            throw new Error(`${userId} does not have access to the details of product ${productCode}`);
 
         try {
-            await ctx.stub.setEvent(EVENT_TYPE, productAsBytes);
+            await ctx.stub.setEvent(EVENT_NAME, Product.toBuffer(product));
         }
         catch (error) {
-            console.log("Error in sending event");
+            console.log("Error in sending readProduct event");
         }
 
-        return productAsBytes;
+        return {
+            status: 'Successfully read a product',
+            product: product
+        };
     }
 
     async readAllProducts(ctx) {
-        let userId = await this.getCurrentUserId(ctx);
-        let userType = await this.getCurrentUserType(ctx);
+        const userId = await this.getCurrentUserId(ctx);
+        const userType = await this.getCurrentUserType(ctx);
+        
         let queryString;
         switch (userType) {
             case "admin": {
@@ -161,19 +182,10 @@ class ProductContract extends Contract {
                 }
                 break;
             }
-            case "customer": {
-                queryString = {
-                    "selector": {},
-                    "fields": ["productId", "companyId", "productName", "productPrice", "productDescription", "productImageHash", "productImageLink"],
-                }
-                break;
-            }
             default: {
                 return [];
             }
         }
-        console.log("In queryAllProducts: queryString = ");
-        console.log(queryString);
 
         const iterator = await ctx.stub.getQueryResult(JSON.stringify(queryString));
         const allProducts = [];
@@ -181,39 +193,35 @@ class ProductContract extends Contract {
             const product = await iterator.next();
             
             if (product.value && product.value.value.toString()) {
-                console.log(product.value.value.toString('utf8'));
                 let Record;
-                
                 try {
                     Record = JSON.parse(product.value.value.toString('utf8'));
                 } catch (err) {
                     console.log(err);
                     Record = product.value.value.toString('utf8');
                 }
-
                 allProducts.push(Record);
             }
 
             if (product.done) {
-                console.log('end of data');
                 await iterator.close();
-                console.info(allProducts);
-                return allProducts;
+                return {
+                    status: 'Successfully read all products',
+                    allProducts: allProducts
+                };
             }
         }
     }
 
-    async readProductHistory(ctx, productId) {
-        if (productId.length < 1) {
-            throw new Error('productId is required as input')
+    async readProductHistory(ctx, productCode) {
+        if (productCode.length < 1) {
+            throw new Error('productCode is required as input')
         }
-        console.log("input, productId = " + productId);
 
-        const iterator = await ctx.stub.getHistoryForKey(productId);        
-
+        const iterator = await ctx.stub.getHistoryForKey(productCode);
         const productHistory = [];
         while (true) {
-            let history = await iterator.next();
+            const history = await iterator.next();
             
             if (history.value && history.value.value.toString()) {
                 let jsonRes = {};
@@ -235,96 +243,116 @@ class ProductContract extends Contract {
             }
 
             if (history.done) {
-                console.log('end of data');
                 await iterator.close();
-                console.info(productHistory);
-                return productHistory;
+                return {
+                    status: 'Successfully read a product history',
+                    productHistory: productHistory
+                };
             }
         }
     }
 
     async updateProduct(ctx, args) {
-        const product_details = JSON.parse(args);
-        const productId = product_details.productId;
-
-        let productAsBytes = await ctx.stub.getState(productId);
-        if (!productAsBytes || productAsBytes.length === 0) {
-            throw new Error(`Error Message from updateProduct: Product with productId = ${productId} does not exist.`);
+        const productDetails = JSON.parse(args);
+        const productBuffer = await ctx.stub.getState(productDetails.productCode);
+        if (!productBuffer || productBuffer.length === 0) {
+            throw new Error(`Error Message from updateProduct: Product with productCode = ${productDetails.productCode} does not exist.`);
         }
 
-        let product = Product.deserialize(productAsBytes);
-        let userId = await this.getCurrentUserId(ctx);
-        if ((userId != "admin") &&
-            (userId != product.companyId))
-            throw new Error(`${userId} does not have access to update details for product ${productId}`);
+        let cipherProduct = JSON.parse(productBuffer);
+        const userId = await this.getCurrentUserId(ctx);
+        const decipherProduct = this.decrypt(cipherProduct, userId);
+        let product = Product.deserializeProduct(decipherProduct);
+        if ((userId !== "admin") &&
+            (userId !== product.getCompanyId()))
+            throw new Error(`${userId} does not have access to update details for product ${product.getProductCode()}`);
 
-        if (product.productName !== product_details.productName) {
-            product.setProductName(product_details.productName);
+        if (product.getProductBrand() !== productDetails.productBrand) {
+            product.setProductBrand(productDetails.productBrand);
         }
-        if (product.productPrice !== product_details.productPrice) {
-            product.setProductPrice(product_details.productPrice.toString());
+        if (product.getProductName() !== productDetails.productName) {
+            product.setProductName(productDetails.productName);
         }
-        if (product.productDescription !== product_details.productDescription) {
-            product.setProductDescription(product_details.productDescription);
+        if (product.getProductPrice() !== productDetails.productPrice) {
+            product.setProductPrice(productDetails.productPrice);
         }
-        if (product.productImageHash !== product_details.productImageHash) {
-            product.setProductImageHash(product_details.productImageHash);
+        if (product.getProductOrigin() !== productDetails.productOrigin) {
+            product.setProductOrigin(productDetails.productOrigin);
         }
-        if (product.productImageLink !== product_details.productImageLink) {
-            product.setProductImageLink(product_details.productImageLink);
+        if (product.getProductReleaseDate() !== productDetails.productReleaseDate) {
+            product.setProductReleaseDate(productDetails.productReleaseDate);
+        }
+        if (product.getProductDescription() !== productDetails.productDescription) {
+            product.setProductDescription(productDetails.productDescription);
+        }
+        if (product.getProductImageHash() !== productDetails.productImageHash) {
+            product.setProductImageHash(productDetails.productImageHash);
+        }
+        if (product.getProductImageLink() !== productDetails.productImageLink) {
+            product.setProductImageLink(productDetails.productImageLink);
         }
 
-        await ctx.stub.putState(productId, product.toBuffer());
+        cipherProduct = this.encrypt(JSON.stringify(product), userId);
+
+        await ctx.stub.putState(product.getProductCode(), Product.toBuffer(cipherProduct));
 
         try {
-            await ctx.stub.setEvent(EVENT_TYPE, product.toBuffer());
+            await ctx.stub.setEvent(EVENT_NAME, Product.toBuffer(cipherProduct));
         }
         catch (error) {
-            console.log("Error in sending event");
+            console.log("Error in sending updateProduct event");
         }
 
-        return product.toBuffer();
+        return {
+            status: 'Successfully update a product',
+            product: cipherProduct
+        };
     }
 
-    async deleteProduct(ctx, productId) {
-        if (productId.length < 1) {
-            throw new Error('Product Id required as input')
-        }
-        console.log("productId = " + productId);
-
-        let productAsBytes = await ctx.stub.getState(productId);
-        if (!productAsBytes || productAsBytes.length === 0) {
-            throw new Error(`Error Message from deleteProduct: Product with productId = ${productId} does not exist.`);
+    async deleteProduct(ctx, productCode) {
+        if (productCode.length < 1) {
+            throw new Error('productCode required as input')
         }
 
-        let product = Product.deserialize(productAsBytes);
-        let userId = await this.getCurrentUserId(ctx);
-        if ((userId != "admin")
-            && (userId != product.companyId))
-            throw new Error(`${userId} does not have access to delete product ${productId}`);
+        let productBuffer = await ctx.stub.getState(productCode);
+        if (!productBuffer || productBuffer.length === 0) {
+            throw new Error(`Error Message from deleteProduct: Product with productCode = ${productCode} does not exist.`);
+        }
 
-        await ctx.stub.deleteState(productId);
+        const cipherProduct = JSON.parse(productBuffer);
+        const userId = await this.getCurrentUserId(ctx);
+        const decipherProduct = this.decrypt(cipherProduct, userId);
+        const product = Product.deserializeProduct(decipherProduct);
+        if ((userId !== "admin")
+            && (userId !== product.getCompanyId()))
+            throw new Error(`${userId} does not have access to delete product ${product.getProductCode()}`);
+
+        await ctx.stub.deleteState(product.getProductCode());
 
         try {
-            await ctx.stub.setEvent(EVENT_TYPE, productId);
+            await ctx.stub.setEvent(EVENT_NAME, productCode);
         }
         catch (error) {
-            console.log("Error in sending event");
+            console.log("Error in sending deleteProduct event");
         }
+
+        return {
+            status: 'Successfully delete a product',
+        };
     }
 
     async getCurrentUserId(ctx) {
         let id = [];
         id.push(ctx.clientIdentity.getID());
-        let begin = id[0].indexOf("/CN=");
-        let end = id[0].lastIndexOf("::/C=");
-        let userid = id[0].substring(begin + 4, end);
+        const begin = id[0].indexOf("/CN=");
+        const end = id[0].lastIndexOf("::/C=");
+        const userid = id[0].substring(begin + 4, end);
         return userid;
     }
 
     async getCurrentUserType(ctx) {
-        let userid = await this.getCurrentUserId(ctx);
-        if (userid == "admin") {
+        const userid = await this.getCurrentUserId(ctx);
+        if (userid === "admin") {
             return userid;
         }
         return ctx.clientIdentity.getAttributeValue("usertype");

@@ -60,9 +60,8 @@ productAuthenticationRouter.route('/create-product/').post(function (request, re
     submitTx(request, 'createProduct', JSON.stringify(request.body))
         .then((result) => {
             console.log('\nProcess createProduct transaction.');
-            let product = Product.fromBuffer(result);
             response.status(STATUS_SUCCESS);
-            response.send(product);
+            response.send(result);
         }, (error) => {
             response.status(STATUS_SERVER_ERROR);
             response.send(utils.prepareErrorResponse(error, STATUS_SERVER_ERROR,
@@ -73,23 +72,22 @@ productAuthenticationRouter.route('/create-product/').post(function (request, re
 productAuthenticationRouter.route('/products/:id').get(function (request, response) {
     submitTx(request, 'readProduct', request.params.id)
         .then((readProductResponse) => {
-            let product = Product.fromBuffer(readProductResponse);
+            console.log('\nProcess readProduct transaction.');
             response.status(STATUS_SUCCESS);
-            response.send(product);
+            response.send(readProductResponse);
         }, (error) => {
             response.status(STATUS_SERVER_ERROR);
-            response.send(utils.prepareErrorResponse(error, PRODUCT_NOT_FOUND,
-                'Product id, ' + request.params.id +
-                ' does not exist or the user does not have access to read product at this time.'));
+            response.send(utils.prepareErrorResponse(error, STATUS_SERVER_ERROR,
+                "There was a problem getting the product."));
         });
 });
 
 productAuthenticationRouter.route('/products').get(function (request, response) {
     submitTx(request, 'readAllProducts', '')
         .then((readAllProductsResponse) => {
-            let products = readAllProductsResponse;
+            console.log('\nProcess readAllProducts transaction.');
             response.status(STATUS_SUCCESS);
-            response.send(products);
+            response.send(readAllProductsResponse);
         }, (error) => {
             response.status(STATUS_SERVER_ERROR);
             response.send(utils.prepareErrorResponse(error, STATUS_SERVER_ERROR,
@@ -100,36 +98,33 @@ productAuthenticationRouter.route('/products').get(function (request, response) 
 productAuthenticationRouter.route('/product-history/:id').get(function (request, response) {
     submitTx(request, 'readProductHistory', request.params.id)
         .then((readProductHistoryResponse) => {
-            console.log('\n>>>Process readProductHistory response', readProductHistoryResponse);
+            console.log('\nProcess productHistory transaction.');
             response.status(STATUS_SUCCESS);
             response.send(readProductHistoryResponse);
         }, (error) => {
             response.status(STATUS_SERVER_ERROR);
             response.send(utils.prepareErrorResponse(error, STATUS_SERVER_ERROR,
-                "There was a problem fetching history for order, ", request.params.id));
+                "There was a problem fetching history for product, ", request.params.id));
         });
 });
 
 productAuthenticationRouter.route('/update-product').put(function (request, response) {
     submitTx(request, 'updateProduct', JSON.stringify(request.body))
         .then((updateProductResponse) => {
-            console.log('Process updateProduct transaction.');
-            let product = Product.fromBuffer(updateProductResponse);
+            console.log('\nProcess updateProduct transaction.');
             response.status(STATUS_SUCCESS);
-            response.send(product);
+            response.send(updateProductResponse);
         }, (error) => {
             response.status(STATUS_SERVER_ERROR);
             response.send(utils.prepareErrorResponse(error, STATUS_SERVER_ERROR,
                 "There was a problem in updating product."));
         });
-
 });
 
 productAuthenticationRouter.route('/delete-product/:id').delete(function (request, response) {
     submitTx(request, 'deleteProduct', request.params.id)
         .then((deleteOrderResponse) => {
-            console.log('Process DeleteOrder transaction.');
-            console.log('Transaction complete.');
+            console.log('\nProcess deleteProduct transaction.');
             response.status(STATUS_SUCCESS);
             response.send(deleteOrderResponse);
         }, (error) => {

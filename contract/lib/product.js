@@ -2,23 +2,37 @@
 
 class Product {
 
-    constructor(productId, companyId, productName, productCode, productPrice, productDescription, productImageHash, productImageLink) {
-        this.productId = productId;
-        this.companyId = companyId;
-        this.productName = productName;
+    constructor(productCode, companyId, productBrand, productName, productPrice, productOrigin, productReleaseDate, productDescription, productImageHash, productImageLink) {
         this.productCode = productCode;
+        this.companyId = companyId;
+        this.productBrand = productBrand;
+        this.productName = productName;
         this.productPrice = productPrice;
+        this.productOrigin = productOrigin;
+        this.productReleaseDate = productReleaseDate;
         this.productDescription = productDescription;
         this.productImageHash = productImageHash;
         this.productImageLink = productImageLink;
     }
 
+    setProductBrand(productBrand) {
+        this.productBrand = productBrand;
+    }
+    
     setProductName(productName) {
         this.productName = productName;
     }
 
     setProductPrice(productPrice) {
         this.productPrice = productPrice;
+    }
+
+    setProductOrigin(productOrigin) {
+        this.productOrigin = productOrigin;
+    }
+
+    setProductReleaseDate(productReleaseDate) {
+        this.productReleaseDate = productReleaseDate;
     }
 
     setProductDescription(productDescription) {
@@ -33,25 +47,63 @@ class Product {
         this.productImageLink = productImageLink;
     }
 
-    toBuffer() {
-        return Buffer.from(JSON.stringify(this));
+    getProductCode() {
+        return this.productCode;
     }
 
-    static fromBuffer(buffer) {
-        return Product.deserialize(Buffer.from(JSON.parse(buffer)));
+    getCompanyId() {
+        return this.companyId;
     }
 
-    static deserialize(data) {
-        let product_details = JSON.parse(data.toString());
-        let product = new Product(
-            product_details.productId,
-            product_details.companyId, 
-            product_details.productName, 
-            product_details.productCode, 
-            product_details.productPrice, 
-            product_details.productDescription, 
-            product_details.productImageHash, 
-            product_details.productImageLink
+    getProductBrand() {
+        return this.productBrand;
+    }
+
+    getProductName() {
+        return this.productName;
+    }
+
+    getProductPrice() {
+        return this.productPrice;
+    }
+
+    getProductOrigin() {
+        return this.productOrigin;
+    }
+
+    getProductReleaseDate() {
+        return this.productReleaseDate;
+    }
+
+    getProductDescription() {
+        return this.productDescription;
+    }
+
+    getProductImageHash() {
+        return this.productImageHash;
+    }
+
+    getProductImageLink() {
+        return this.productImageLink;
+    }
+
+    static toBuffer(buffer) {
+        return Buffer.from(JSON.stringify(buffer));
+    }
+
+    static deserializeProduct(productData) {
+        const productDetails = JSON.parse(productData.toString());
+        const product = new Product(
+            productDetails.productCode,
+            productDetails.companyId, 
+            productDetails.productBrand, 
+            productDetails.productName,  
+            productDetails.productPrice,
+            productDetails.productOrigin,
+            productDetails.productReleaseDate, 
+            productDetails.productDescription, 
+            productDetails.productImageHash, 
+            productDetails.productImageLink
         );
         return product;
     }
