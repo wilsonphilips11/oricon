@@ -4,6 +4,7 @@ const { Contract, Context } = require('fabric-contract-api');
 const Product = require('./product.js');
 const EVENT_NAME = "productContractEvent";
 const Crypto = require('crypto');
+const ERC20Token = require("./token/ERC20Token.js");
 
 class ProductContext extends Context {
     
@@ -37,7 +38,7 @@ class ProductContract extends Contract {
         return decrypted.toString();
     }
 
-    async initializeProducts(ctx) {
+    async initializeProducts(ctx, args) {
         const products = [
             {
                 productCode: '001',
@@ -95,6 +96,18 @@ class ProductContract extends Contract {
 
             await ctx.stub.putState(product.getProductCode(), Product.toBuffer(cipherProduct));
         }
+
+        const tokenDetails = JSON.parse(args);
+        const token = new ERC20Token(
+            tokenDetails.name,
+            tokenDetails.symbol, 
+            tokenDetails.decimals, 
+            tokenDetails.owner, 
+            tokenDetails.totalSupply, 
+            tokenDetails.balanceOf,  
+            tokenDetails.allowance
+        );
+        await ctx.stub.putState('token', ERC20Token.toBuffer(token));
     }
 
     async createProduct(ctx, args) {
@@ -356,6 +369,56 @@ class ProductContract extends Contract {
             return userid;
         }
         return ctx.clientIdentity.getAttributeValue("usertype");
+    }
+
+    async getCurrentUserMspId(ctx) {
+        const mspId = ctx.clientIdentity.getMSPID();
+        return mspId;
+    }
+
+    async getTokenDetail(ctx) {
+        const tokenBuffer = await ctx.stub.getState('token');
+        if (!tokenBuffer || tokenBuffer.length === 0) {
+            throw new Error(`Error Message from getTokenDetail: token does not exist.`);
+        }
+        
+        const token = ERC20Token.deserializeToken(tokenBuffer);
+        const mspId = await this.getCurrentUserMspId(ctx);
+        const tokenDetails = {
+            name: `${token.getName()}`,
+            symbol: `${token.getSymbol()}`,
+            decimals: token.getDecimals(),
+            owner: `${token.getOwner()}`,
+            balanceOf: token.getBalanceOf(mspId) ? token.getBalanceOf(mspId) : 'undefined'
+        };
+        if (mspId === token.getOwner()) {
+            tokenDetails['totalSupply'] = token.getTotalSupply();
+        }
+
+        return {
+            status: 'Successfully get token detail',
+            token: tokenDetails
+        };
+    }
+
+    async transferToken(ctx){
+
+    }
+
+    async transferFromToken(ctx){
+        
+    }
+
+    async approveToken(ctx){
+        
+    }
+
+    async getAllowanceToken(ctx){
+        
+    }
+
+    async mintToken(ctx){
+        
     }
 }
 

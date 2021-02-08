@@ -361,4 +361,12 @@ utils.getRandomNum = () => {
     return `${s4()}${s4()}${s4()}${s4()}`
 }
 
+utils.getMsps = () => {
+    const channel = network.getChannel();
+    const mspManager = channel.getMSPManager(); 
+    return Promise.resolve({
+        msps: Object.keys(mspManager._msps)
+    });
+};
+
 module.exports = utils;

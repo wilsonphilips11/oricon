@@ -13,6 +13,7 @@ class Product {
         this.productDescription = productDescription;
         this.productImageHash = productImageHash;
         this.productImageLink = productImageLink;
+        this.objectType = 'product';
     }
 
     setProductBrand(productBrand) {

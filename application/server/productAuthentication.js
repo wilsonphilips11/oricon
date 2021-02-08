@@ -134,6 +134,19 @@ productAuthenticationRouter.route('/delete-product/:id').delete(function (reques
         });
 });
 
+productAuthenticationRouter.route('/token-detail').get(function (request, response) {
+    submitTx(request, 'getTokenDetail')
+        .then((getTokenDetailResponse) => {
+            console.log('\nProcess getTokenName transaction.');
+            response.status(STATUS_SUCCESS);
+            response.send(getTokenDetailResponse);
+        }, (error) => {
+            response.status(STATUS_SERVER_ERROR);
+            response.send(utils.prepareErrorResponse(error, STATUS_SERVER_ERROR,
+                "There was a problem in getting token detail"));
+        });
+});
+
 
 productAuthenticationRouter.route('/register-user').post(function (request, response) {
     try {
@@ -250,6 +263,17 @@ productAuthenticationRouter.route('/users/:id').get(function (request, response)
             response.send(utils.prepareErrorResponse(error, INVALID_HEADER,
                 "Invalid header;  User, " + request.params.id + " could not be enrolled."));
         }));
+});
+
+productAuthenticationRouter.route('/msps').get(function (request, response) {
+    utils.getMsps().then((result) => {
+        response.status(STATUS_SUCCESS);
+        response.send(result);
+    }, (error) => {
+        response.status(STATUS_SERVER_ERROR);
+        response.send(utils.prepareErrorResponse (error, STATUS_SERVER_ERROR,
+            "Problem getting msp manager."));
+    });
 });
 
 module.exports = productAuthenticationRouter;
