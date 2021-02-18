@@ -17,6 +17,7 @@
   "author": "John Doe",
   "license": "Apache-2.0",
   "dependencies": {
+    "crystals-kyber": "^2.0.2",
     "fabric-contract-api": "1.4.0",
     "fabric-shim": "1.4.0"
   },
