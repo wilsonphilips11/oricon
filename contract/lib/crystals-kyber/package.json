@@ -1,0 +1,50 @@
+{
+  "_from": "crystals-kyber",
+  "_id": "crystals-kyber@2.0.2",
+  "_inBundle": false,
+  "_integrity": "sha512-UVnCny89uH1zkm8ic0Tw82FE54KYgvJT8Uci96AUNT67+1P+WMgBOKWlyF8jtN6Emj/0eeesV7B0FB9G8ujnmA==",
+  "_location": "/crystals-kyber",
+  "_phantomChildren": {},
+  "_requested": {
+    "type": "tag",
+    "registry": true,
+    "raw": "crystals-kyber",
+    "name": "crystals-kyber",
+    "escapedName": "crystals-kyber",
+    "rawSpec": "",
+    "saveSpec": null,
+    "fetchSpec": "latest"
+  },
+  "_requiredBy": [
+    "#USER",
+    "/"
+  ],
+  "_resolved": "https://registry.npmjs.org/crystals-kyber/-/crystals-kyber-2.0.2.tgz",
+  "_shasum": "69aa01deb8eb49f73376146f5c1e1effa91ec8ed",
+  "_spec": "crystals-kyber",
+  "_where": "/home/kevinh/fabric-samples/product-authentication/contract",
+  "bugs": {
+    "url": "https://github.com/antontutoveanu/crystals-kyber-javascript/issues"
+  },
+  "bundleDependencies": false,
+  "dependencies": {
+    "sha3": "2.1.3"
+  },
+  "deprecated": false,
+  "description": "JavaScript implementation of CRYSTALS-KYBER (version 3) post-quantum key exchange algorithm.",
+  "homepage": "https://github.com/antontutoveanu/crystals-kyber-javascript#readme",
+  "keywords": [
+    "post-quantum",
+    "post-quantum-cryptography",
+    "crystals-kyber",
+    "javascript"
+  ],
+  "license": "MIT",
+  "main": "index.js",
+  "name": "crystals-kyber",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/antontutoveanu/crystals-kyber-javascript.git"
+  },
+  "version": "2.0.2"
+}

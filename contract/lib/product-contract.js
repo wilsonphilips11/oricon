@@ -4,6 +4,8 @@ const { Contract, Context } = require('fabric-contract-api');
 const Product = require('./product.js');
 const EVENT_NAME = "productContractEvent";
 const Crypto = require('crypto');
+const fs = require('fs');
+const {K768_KeyGen, K768_Encrypt, K768_Decrypt} = require('./crystals-kyber/index.js');
 
 class ProductContext extends Context {
     
@@ -23,18 +25,57 @@ class ProductContract extends Contract {
         return new ProductContext();
     }
 
-    encrypt(data, password){   
-        const cipher = Crypto.createCipher('aes256', password);  
+    encrypt(data, userId){
+        const cipher_symKey = this.pqEncrypt(userId);
+        const symBuffer = Buffer.from(cipher_symKey[1]);
+        const cipher = Crypto.createCipher('aes256', symBuffer);  
         let encrypted = cipher.update(data, 'utf8', 'hex');
         encrypted += cipher.final('hex');   
-        return encrypted;
+
+        return JSON.stringify({
+            'productDetail': encrypted,
+            'cipherKey': cipher_symKey[0],
+        });
     }
 
-    decrypt(cipherData, password)  {    
-        const decipher = Crypto.createDecipher('aes256', password);    
-        let decrypted = decipher.update(cipherData, 'hex', 'utf8');
-        decrypted += decipher.final('utf8');   
+    decrypt(data, userId)  {
+        data = JSON.parse(data);
+        const symKey = this.pqDecrypt(data.cipherKey, userId);
+        const symBuffer = Buffer.from(symKey);
+
+        const decipher = Crypto.createDecipher('aes256', symBuffer);    
+        let decrypted = decipher.update(data.productDetail, 'hex', 'utf8');
+        decrypted += decipher.final('utf8');  
         return decrypted.toString();
+    }
+
+    pqEncrypt(userId) {
+        const userWallet = require.resolve(`./wallet/${userId}/pk-K768.txt`);
+        let publicKey;
+        try {
+            publicKey = fs.readFileSync(`${userWallet}`, 'utf8');
+            publicKey = publicKey.split(",").map(Number);
+          } catch (err) {
+            console.error('Error: ', err);
+        }
+          
+        const cipher_symKey = K768_Encrypt(publicKey);
+        return cipher_symKey;
+    }
+
+    pqDecrypt(cipherKey, userId) {
+        const userWallet = require.resolve(`./wallet/${userId}/sk-K768.txt`);
+
+        let secretKey;
+        try {
+            secretKey = fs.readFileSync(`${userWallet}`, 'utf8');
+            secretKey = secretKey.split(",").map(Number);
+          } catch (err) {
+            console.error('Error: ', err);
+        }
+
+        const symKey = K768_Decrypt(cipherKey,secretKey);
+        return symKey;
     }
 
     async initializeProducts(ctx) {
