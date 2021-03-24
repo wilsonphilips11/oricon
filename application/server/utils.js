@@ -5,6 +5,8 @@ const fs = require('fs');
 const path = require('path');
 const { FileSystemWallet, Gateway, User, X509WalletMixin } = require('fabric-network');
 const FabricCAServices = require('fabric-ca-client');
+const {K768_Decrypt} = require('../../contract/lib/crystals-kyber/index.js');
+const Crypto = require('crypto');
 
 //  global variables for HLFabric
 var gateway;
@@ -19,6 +21,7 @@ const EVENT_TYPE = "productContractEvent";  //  HLFabric EVENT
 
 const SUCCESS = 0;
 const utils = {};
+const { inspect } = require('util');
 
 utils.prepareErrorResponse = (error, code, message) => {
     let errorMsg;
@@ -162,7 +165,7 @@ utils.events = async () => {
     Promise.all([event_monitor]);
 }
 
-utils.submitTx = async(contract, txName, ...args) => {
+utils.submitTx = async (contract, txName, ...args) => {
     console.log(">>>utils.submitTx..."+txName+" ("+args+")");
     let result = contract.submitTransaction(txName, ...args);
     return result.then (response => {
@@ -173,6 +176,71 @@ utils.submitTx = async(contract, txName, ...args) => {
         {
           console.log ('utils.js: Error:' + error.toString());
           return Promise.reject(error);
+        });
+}
+
+utils.evalTx = async (contract, txName, ...args) => {
+    console.log(">>>utils.evalTx..."+txName+" ("+args+")");
+    let result = contract.evaluateTransaction(txName, ...args);
+    return result.then (response => {
+        // console.log ('Transaction submitted successfully;  Response: ', response.toString());
+        console.log ('utils.js: Transaction evaluated successfully');
+        return Promise.resolve(response.toString());
+    },(error) =>
+        {
+          console.log ('utils.js: Error:' + error.toString());
+          return Promise.reject(error);
+        });
+}
+
+utils.queryTransactionByID = async (trId) => {      
+    console.log(">>>utils.queryTransactionByID... trId"+trId);
+    const client = gateway.getClient();
+    const channel = client.getChannel(configdata["channel_name"]);
+    const peers = channel.getChannelPeers();
+
+    let response_payload = channel.queryTransaction(trId, peers[0].getName());
+    return response_payload.then(response => {
+        const writeSet = response.transactionEnvelope
+                            .payload
+                            .data
+                            .actions[0]
+                            .payload
+                            .action
+                            .proposal_response_payload
+                            .extension
+                            .results
+                            .ns_rwset[1]
+                            .rwset
+                            .writes[0];
+        const writeSetValue = JSON.parse(writeSet.value);
+        const productDetails = writeSetValue.detail;
+        const cipherKey = writeSetValue.cipherKey;
+
+        const userWallet = require.resolve(`../../contract/lib/wallet/admin/sk-K768.txt`);
+        let secretKey;
+        try {
+            secretKey = fs.readFileSync(`${userWallet}`, 'utf8');
+            secretKey = secretKey.split(",").map(Number);
+          } catch (err) {
+            console.error('Error: ', err);
+        }
+        
+        const symKey = K768_Decrypt(cipherKey, secretKey);
+        const symBuffer = Buffer.from(symKey);
+        const decipher = Crypto.createDecipher('aes256', symBuffer);    
+        let decrypted = decipher.update(productDetails, 'hex', 'utf8');
+        decrypted += decipher.final('utf8');
+
+        return Promise.resolve({
+            status: "Successfully read product by transaction ID",
+            isDeleted: writeSet.is_delete,
+            result: JSON.parse(decrypted.toString())
+        });
+    },(error) =>
+        {
+            console.log ('utils.js: Error:' + error.toString());
+            return Promise.reject(error);
         });
 }
 
@@ -214,7 +282,13 @@ utils.registerUser = async (userid, userpwd, usertype, adminIdentity) => {
             //  if a password was not set in 'enrollmentSecret' field of newUserDetails,
             //  then a generated password is returned by "register".
             console.log('\n Secret returned: ' + newPwd);
-            return newPwd;
+            return {
+                status: 'Successfully register new user!',
+                result: {
+                    enrollmentID: userid,
+                    enrollmentSecret: userpwd ? userpwd : newPwd,
+                }
+            };
         }, error => {
             console.log('Error in register();  ERROR returned: ' + error.toString());
             return Promise.reject(error);
@@ -247,7 +321,9 @@ utils.enrollUser = async (userid, userpwd, usertype) => {
         //console.log("\n Successful enrollment; Data returned by enroll", enrollment.certificate);
         var identity = X509WalletMixin.createIdentity(orgMSPID, enrollment.certificate, enrollment.key.toBytes());
         return wallet.import(userid, identity).then(notused => {
-            return console.log('msg: Successfully enrolled user, ' + userid + ' and imported into the wallet');
+            return {
+                status: 'Successfully enroll user and import into the wallet!'
+            };
         }, error => {
             console.log("error in wallet.import\n" + error.toString());
             throw error;
@@ -289,7 +365,10 @@ utils.setUserContext = async (userid, pwd) => {
 
 utils.isUserEnrolled = async (userid) => {
     return wallet.exists(userid).then(result => {
-        return result;
+        return Promise.resolve({
+            status: 'Successfully check if user is enrolled!',
+            isEnrolled: result
+        });
     }, error => {
         console.log("error in wallet.exists\n" + error.toString());
         throw error;
@@ -316,7 +395,10 @@ utils.getUser = async (userid, adminIdentity) => {
             result.usertype = user.result.attrs[j].value;
     }
     console.log (result);
-    return Promise.resolve(result);
+    return Promise.resolve({
+        status: 'Successfully get current user logged in!',
+        result: result
+    });
 }
 
 utils.getAllUsers = async (adminIdentity) => {
@@ -353,20 +435,16 @@ utils.getAllUsers = async (adminIdentity) => {
         }
         result.push(tmp);
     }
-    return result;
+    
+    return Promise.resolve({
+        status: 'Successfully get all registered user!',
+        result: result
+    });
 }
 
 utils.getRandomNum = () => {
     const s4 = () => Math.floor((1 + Math.random()) * 0x10000).toString(16).substring(1)
     return `${s4()}${s4()}${s4()}${s4()}`
 }
-
-utils.getMsps = () => {
-    const channel = network.getChannel();
-    const mspManager = channel.getMSPManager(); 
-    return Promise.resolve({
-        msps: Object.keys(mspManager._msps)
-    });
-};
 
 module.exports = utils;

@@ -2,22 +2,15 @@
 
 class Product {
 
-    constructor(productCode, companyId, productBrand, productName, productPrice, productOrigin, productReleaseDate, productDescription, productImageHash, productImageLink) {
+    constructor(txId, productCode, productName, productPrice, productOrigin, productReleaseDate, productDescription, productImageBase64) {
+        this.productTxId = txId;
         this.productCode = productCode;
-        this.companyId = companyId;
-        this.productBrand = productBrand;
         this.productName = productName;
         this.productPrice = productPrice;
         this.productOrigin = productOrigin;
         this.productReleaseDate = productReleaseDate;
         this.productDescription = productDescription;
-        this.productImageHash = productImageHash;
-        this.productImageLink = productImageLink;
-        this.objectType = 'product';
-    }
-
-    setProductBrand(productBrand) {
-        this.productBrand = productBrand;
+        this.productImageBase64 = productImageBase64;
     }
     
     setProductName(productName) {
@@ -40,24 +33,16 @@ class Product {
         this.productDescription = productDescription;
     }
 
-    setProductImageHash(productImageHash) {
-        this.productImageHash = productImageHash;
+    setProductImageBase64(productImageBase64) {
+        this.productImageBase64 = productImageBase64;
     }
 
-    setProductImageLink(productImageLink) {
-        this.productImageLink = productImageLink;
+    getProductTxId() {
+        return this.productTxId;
     }
 
     getProductCode() {
         return this.productCode;
-    }
-
-    getCompanyId() {
-        return this.companyId;
-    }
-
-    getProductBrand() {
-        return this.productBrand;
     }
 
     getProductName() {
@@ -80,12 +65,8 @@ class Product {
         return this.productDescription;
     }
 
-    getProductImageHash() {
-        return this.productImageHash;
-    }
-
-    getProductImageLink() {
-        return this.productImageLink;
+    getProductImageBase64() {
+        return this.productImageBase64;
     }
 
     static toBuffer(buffer) {
@@ -95,16 +76,14 @@ class Product {
     static deserializeProduct(productData) {
         const productDetails = JSON.parse(productData.toString());
         const product = new Product(
+            productDetails.txId,
             productDetails.productCode,
-            productDetails.companyId, 
-            productDetails.productBrand, 
             productDetails.productName,  
             productDetails.productPrice,
             productDetails.productOrigin,
             productDetails.productReleaseDate, 
             productDetails.productDescription, 
-            productDetails.productImageHash, 
-            productDetails.productImageLink
+            productDetails.productImageBase64
         );
         return product;
     }

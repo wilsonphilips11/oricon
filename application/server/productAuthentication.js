@@ -16,6 +16,11 @@ const INVALID_HEADER = 1001;
 const SUCCESS = 0;
 const PRODUCT_NOT_FOUND = 2000;
 
+const log4js = require('log4js');
+const logger = log4js.getLogger('Helper');
+logger.level = 'DEBUG';
+const { inspect } = require('util');
+
 async function getUsernamePassword(request) {
     if (!request.headers.authorization || request.headers.authorization.indexOf('Basic ') === -1) {
         return new Promise().reject('Missing Authorization Header');
@@ -56,6 +61,27 @@ async function submitTx(request, txName, ...args) {
     }
 }
 
+async function evalTx(request, txName, ...args) {
+    try {
+        await getUsernamePassword(request);
+        return utils.setUserContext(request.username, request.password).then((contract) => {
+            args.unshift(txName);
+            args.unshift(contract);
+            return utils.evalTx.apply("unused", args)
+                .then(buffer => {
+                    return buffer;
+                }, error => {
+                    return Promise.reject(error);
+                });
+        }, error => {
+            return Promise.reject(error);
+        });
+    }
+    catch (error) {
+        return Promise.reject(error);
+    }
+}
+
 productAuthenticationRouter.route('/create-product/').post(function (request, response) {
     submitTx(request, 'createProduct', JSON.stringify(request.body))
         .then((result) => {
@@ -69,12 +95,12 @@ productAuthenticationRouter.route('/create-product/').post(function (request, re
         });
 });
 
-productAuthenticationRouter.route('/products/:id').get(function (request, response) {
-    submitTx(request, 'readProduct', request.params.id)
-        .then((readProductResponse) => {
+productAuthenticationRouter.route('/products/:productCode').get(function (request, response) {
+    evalTx(request, 'readProduct', request.params.productCode)
+        .then((result) => {
             console.log('\nProcess readProduct transaction.');
             response.status(STATUS_SUCCESS);
-            response.send(readProductResponse);
+            response.send(result);
         }, (error) => {
             response.status(STATUS_SERVER_ERROR);
             response.send(utils.prepareErrorResponse(error, STATUS_SERVER_ERROR,
@@ -82,12 +108,30 @@ productAuthenticationRouter.route('/products/:id').get(function (request, respon
         });
 });
 
+productAuthenticationRouter.route('/queryTransaction/:transactionId').get(function (request, response) {
+    getUsernamePassword(request)
+        .then(request => {
+            utils.queryTransactionByID(request.params.transactionId).then((result) => {
+                response.status(STATUS_SUCCESS);
+                response.send(result);
+            }, (error) => {
+                response.status(STATUS_SERVER_ERROR);
+                response.send(utils.prepareErrorResponse (error, STATUS_SERVER_ERROR,
+                    "Problem querying transaction by id."));
+            });
+        }, ((error) => {
+            response.status(STATUS_CLIENT_ERROR);
+            response.send(utils.prepareErrorResponse(error, INVALID_HEADER,
+                "Invalid header;  User, " + request.username + " could not be enrolled."));
+        }));
+});
+
 productAuthenticationRouter.route('/products').get(function (request, response) {
-    submitTx(request, 'readAllProducts', '')
-        .then((readAllProductsResponse) => {
+    evalTx(request, 'readAllProducts', '')
+        .then((result) => {
             console.log('\nProcess readAllProducts transaction.');
             response.status(STATUS_SUCCESS);
-            response.send(readAllProductsResponse);
+            response.send(result);
         }, (error) => {
             response.status(STATUS_SERVER_ERROR);
             response.send(utils.prepareErrorResponse(error, STATUS_SERVER_ERROR,
@@ -95,25 +139,25 @@ productAuthenticationRouter.route('/products').get(function (request, response) 
         });
 });
 
-productAuthenticationRouter.route('/product-history/:id').get(function (request, response) {
-    submitTx(request, 'readProductHistory', request.params.id)
-        .then((readProductHistoryResponse) => {
+productAuthenticationRouter.route('/state-history/:stateKey').get(function (request, response) {
+    evalTx(request, 'readStateHistory', request.params.stateKey)
+        .then((result) => {
             console.log('\nProcess productHistory transaction.');
             response.status(STATUS_SUCCESS);
-            response.send(readProductHistoryResponse);
+            response.send(result);
         }, (error) => {
             response.status(STATUS_SERVER_ERROR);
             response.send(utils.prepareErrorResponse(error, STATUS_SERVER_ERROR,
-                "There was a problem fetching history for product, ", request.params.id));
+                "There was a problem fetching history for product, ", request.params.stateKey));
         });
 });
 
 productAuthenticationRouter.route('/update-product').put(function (request, response) {
     submitTx(request, 'updateProduct', JSON.stringify(request.body))
-        .then((updateProductResponse) => {
+        .then((result) => {
             console.log('\nProcess updateProduct transaction.');
             response.status(STATUS_SUCCESS);
-            response.send(updateProductResponse);
+            response.send(result);
         }, (error) => {
             response.status(STATUS_SERVER_ERROR);
             response.send(utils.prepareErrorResponse(error, STATUS_SERVER_ERROR,
@@ -121,29 +165,94 @@ productAuthenticationRouter.route('/update-product').put(function (request, resp
         });
 });
 
-productAuthenticationRouter.route('/delete-product/:id').delete(function (request, response) {
-    submitTx(request, 'deleteProduct', request.params.id)
-        .then((deleteOrderResponse) => {
+productAuthenticationRouter.route('/delete-product/:productCode').delete(function (request, response) {
+    submitTx(request, 'deleteProduct', request.params.productCode)
+        .then((result) => {
             console.log('\nProcess deleteProduct transaction.');
             response.status(STATUS_SUCCESS);
-            response.send(deleteOrderResponse);
+            response.send(result);
         }, (error) => {
             response.status(STATUS_SERVER_ERROR);
             response.send(utils.prepareErrorResponse(error, STATUS_SERVER_ERROR,
-                "There was a problem in deleting product, " + request.params.id));
+                "There was a problem in deleting product, " + request.params.productCode));
         });
 });
 
 productAuthenticationRouter.route('/token-detail').get(function (request, response) {
-    submitTx(request, 'getTokenDetail')
-        .then((getTokenDetailResponse) => {
-            console.log('\nProcess getTokenName transaction.');
+    evalTx(request, 'getTokenDetail')
+        .then((result) => {
+            console.log('\nProcess getTokenDetail transaction.');
             response.status(STATUS_SUCCESS);
-            response.send(getTokenDetailResponse);
+            response.send(result);
         }, (error) => {
             response.status(STATUS_SERVER_ERROR);
             response.send(utils.prepareErrorResponse(error, STATUS_SERVER_ERROR,
                 "There was a problem in getting token detail"));
+        });
+});
+
+productAuthenticationRouter.route('/transfer-token').post(function (request, response) {
+    submitTx(request, 'transferToken', JSON.stringify(request.body))
+        .then((result) => {
+            console.log('\nProcess transferToken transaction.');
+            response.status(STATUS_SUCCESS);
+            response.send(result);
+        }, (error) => {
+            response.status(STATUS_SERVER_ERROR);
+            response.send(utils.prepareErrorResponse(error, STATUS_SERVER_ERROR,
+                "There was a problem in transferring token."));
+        });
+});
+
+productAuthenticationRouter.route('/transfer-from-token').post(function (request, response) {
+    submitTx(request, 'transferFromToken', JSON.stringify(request.body))
+        .then((result) => {
+            console.log('\nProcess transferFromToken transaction.');
+            response.status(STATUS_SUCCESS);
+            response.send(result);
+        }, (error) => {
+            response.status(STATUS_SERVER_ERROR);
+            response.send(utils.prepareErrorResponse(error, STATUS_SERVER_ERROR,
+                "There was a problem in transferring token from."));
+        });
+});
+
+productAuthenticationRouter.route('/approve-token').put(function (request, response) {
+    submitTx(request, 'approveToken', JSON.stringify(request.body))
+        .then((result) => {
+            console.log('\nProcess approveToken transaction.');
+            response.status(STATUS_SUCCESS);
+            response.send(result);
+        }, (error) => {
+            response.status(STATUS_SERVER_ERROR);
+            response.send(utils.prepareErrorResponse(error, STATUS_SERVER_ERROR,
+                "There was a problem in approving token."));
+        });
+});
+
+productAuthenticationRouter.route('/allowance-token/:owner').get(function (request, response) {
+    evalTx(request, 'getAllowanceToken', request.params.owner)
+        .then((result) => {
+            console.log('\nProcess getAllowanceToken transaction.');
+            response.status(STATUS_SUCCESS);
+            response.send(result);
+        }, (error) => {
+            response.status(STATUS_SERVER_ERROR);
+            response.send(utils.prepareErrorResponse(error, STATUS_SERVER_ERROR,
+                "There was a problem in approving token."));
+        });
+});
+
+productAuthenticationRouter.route('/mint-token').post(function (request, response) {
+    submitTx(request, 'mintToken', JSON.stringify(request.body))
+        .then((result) => {
+            console.log('\nProcess mintToken transaction.');
+            response.status(STATUS_SUCCESS);
+            response.send(result);
+        }, (error) => {
+            response.status(STATUS_SERVER_ERROR);
+            response.send(utils.prepareErrorResponse(error, STATUS_SERVER_ERROR,
+                "There was a problem in minting token."));
         });
 });
 
@@ -238,7 +347,7 @@ productAuthenticationRouter.route('/users/:id').get(function (request, response)
     getUsernamePassword(request)
         .then(request => {
             utils.isUserEnrolled(request.params.id).then(result1 => {
-                if (result1 == true) {
+                if (result1.isEnrolled == true) {
                     utils.getUser(request.params.id, request.username).then((result2) => {
                         response.status(STATUS_SUCCESS);
                         response.send(result2);
@@ -263,17 +372,6 @@ productAuthenticationRouter.route('/users/:id').get(function (request, response)
             response.send(utils.prepareErrorResponse(error, INVALID_HEADER,
                 "Invalid header;  User, " + request.params.id + " could not be enrolled."));
         }));
-});
-
-productAuthenticationRouter.route('/msps').get(function (request, response) {
-    utils.getMsps().then((result) => {
-        response.status(STATUS_SUCCESS);
-        response.send(result);
-    }, (error) => {
-        response.status(STATUS_SERVER_ERROR);
-        response.send(utils.prepareErrorResponse (error, STATUS_SERVER_ERROR,
-            "Problem getting msp manager."));
-    });
 });
 
 module.exports = productAuthenticationRouter;

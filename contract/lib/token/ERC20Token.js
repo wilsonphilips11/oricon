@@ -10,7 +10,6 @@ class ERC20Token {
         this.totalSupply = totalSupply;
         this.balanceOf = balanceOf;
         this.allowance = allowance;
-        this.objectType = 'token';
     }
 
     getName() {
@@ -45,8 +44,8 @@ class ERC20Token {
             throw new Error('Value must be positive number!');
         }
         value = parseFloat(value.toFixed(this.decimals));
-        if (this.balanceOf[`${owner}`] === undefined) {
-            throw new Error(`${owner} balance does not exists!`);
+        if (this.balanceOf[`${sender}`] === undefined) {
+            throw new Error(`${sender} balance does not exists!`);
         }
         if (this.balanceOf[`${sender}`] < value) {
             throw new Error(`${sender} balance must be greater or equal to transfer value!`);
@@ -80,9 +79,12 @@ class ERC20Token {
         if (typeof(value) !== 'number' || value < 0) {
             throw new Error('Value must be positive number!');
         }
+        if (this.balanceOf[`${owner}`] < value ) {
+            throw new Error(`${owner}  balance must be greater or equal to approve value!`);
+        }
         value = parseFloat(value.toFixed(this.decimals));
-        this.allowance[`${owner}`] = {
-            [spender]: value
+        this.allowance[`${spender}`] = {
+            [owner]: value
         };
     }
 
@@ -104,7 +106,7 @@ class ERC20Token {
             throw new Error('Value must be positive number!');
         }
         value = parseFloat(value.toFixed(this.decimals));
-        return this.totalSupply += value;
+        this.totalSupply += value;
     }
 
     static toBuffer(buffer) {

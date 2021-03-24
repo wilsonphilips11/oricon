@@ -4,6 +4,7 @@ const { Contract, Context } = require('fabric-contract-api');
 const Product = require('./product.js');
 const EVENT_NAME = "productContractEvent";
 const Crypto = require('crypto');
+const ERC20Token = require('./token/ERC20Token.js');
 const fs = require('fs');
 const {K768_KeyGen, K768_Encrypt, K768_Decrypt} = require('./crystals-kyber/index.js');
 
@@ -25,27 +26,29 @@ class ProductContract extends Contract {
         return new ProductContext();
     }
 
-    encrypt(data, userId){
+    encrypt(data, userId, objectType) {
         const cipher_symKey = this.pqEncrypt(userId);
         const symBuffer = Buffer.from(cipher_symKey[1]);
+        
         const cipher = Crypto.createCipher('aes256', symBuffer);  
         let encrypted = cipher.update(data, 'utf8', 'hex');
-        encrypted += cipher.final('hex');   
-
-        return JSON.stringify({
-            'productDetail': encrypted,
+        encrypted += cipher.final('hex');
+            
+        return {
+            'detail': encrypted,
             'cipherKey': cipher_symKey[0],
-        });
+            'objectType': `${objectType}`
+        };
     }
 
-    decrypt(data, userId)  {
-        data = JSON.parse(data);
+    decrypt(data, userId) {
         const symKey = this.pqDecrypt(data.cipherKey, userId);
         const symBuffer = Buffer.from(symKey);
-
+        
         const decipher = Crypto.createDecipher('aes256', symBuffer);    
-        let decrypted = decipher.update(data.productDetail, 'hex', 'utf8');
-        decrypted += decipher.final('utf8');  
+        let decrypted = decipher.update(data.detail, 'hex', 'utf8');
+        decrypted += decipher.final('utf8');
+
         return decrypted.toString();
     }
 
@@ -58,14 +61,14 @@ class ProductContract extends Contract {
           } catch (err) {
             console.error('Error: ', err);
         }
-          
+        
         const cipher_symKey = K768_Encrypt(publicKey);
+
         return cipher_symKey;
     }
 
     pqDecrypt(cipherKey, userId) {
         const userWallet = require.resolve(`./wallet/${userId}/sk-K768.txt`);
-
         let secretKey;
         try {
             secretKey = fs.readFileSync(`${userWallet}`, 'utf8');
@@ -73,70 +76,13 @@ class ProductContract extends Contract {
           } catch (err) {
             console.error('Error: ', err);
         }
-
+        
         const symKey = K768_Decrypt(cipherKey,secretKey);
+
         return symKey;
     }
 
-    async initializeProducts(ctx) {
-        const products = [
-            {
-                productCode: '001',
-                companyId: 'Lorem Ipsum',
-                productBrand: 'Lorem Ipsum',
-                productName: 'Lorem Ipsum',
-                productPrice: 123123,
-                productOrigin: 'Lorem Ipsum',
-                productReleaseDate: 'Lorem Ipsum',
-                productDescription: 'Lorem Ipsum',
-                productImageHash: 'Lorem Ipsum',
-                productImageLink: 'Lorem Ipsum',
-            },
-            {
-                productCode: '002',
-                companyId: 'Lorem Ipsum',
-                productBrand: 'Lorem Ipsum',
-                productName: 'Lorem Ipsum',
-                productPrice: 123123,
-                productOrigin: 'Lorem Ipsum',
-                productReleaseDate: 'Lorem Ipsum',
-                productDescription: 'Lorem Ipsum',
-                productImageHash: 'Lorem Ipsum',
-                productImageLink: 'Lorem Ipsum',
-            },
-            {
-                productCode: '003',
-                companyId: 'Lorem Ipsum',
-                productBrand: 'Lorem Ipsum',
-                productName: 'Lorem Ipsum',
-                productPrice: 123123,
-                productOrigin: 'Lorem Ipsum',
-                productReleaseDate: 'Lorem Ipsum',
-                productDescription: 'Lorem Ipsum',
-                productImageHash: 'Lorem Ipsum',
-                productImageLink: 'Lorem Ipsum',
-            }
-        ];
-
-        for (let i = 0; i < products.length; i++) {
-            let product = new Product(
-                products[i].productCode,
-                products[i].companyId, 
-                products[i].productBrand, 
-                products[i].productName,  
-                products[i].productPrice,
-                products[i].productOrigin,
-                products[i].productReleaseDate, 
-                products[i].productDescription, 
-                products[i].productImageHash, 
-                products[i].productImageLink
-            );
-            
-            const cipherProduct = this.encrypt(JSON.stringify(product), 'admin');
-
-            await ctx.stub.putState(product.getProductCode(), Product.toBuffer(cipherProduct));
-        }
-
+    async init(ctx, args) {
         const tokenDetails = JSON.parse(args);
         const token = new ERC20Token(
             tokenDetails.name,
@@ -147,38 +93,43 @@ class ProductContract extends Contract {
             tokenDetails.balanceOf,  
             tokenDetails.allowance
         );
-        await ctx.stub.putState('token', ERC20Token.toBuffer(token));
+
+        // Cipher
+        const cipherToken = this.encrypt(JSON.stringify(token), 'admin', 'token');
+        await ctx.stub.putState('token', ERC20Token.toBuffer(cipherToken));
+        
+        // Plain
+        // await ctx.stub.putState('token', ERC20Token.toBuffer(token));
     }
 
     async createProduct(ctx, args) {
         const userType = await this.getCurrentUserType(ctx);
-        if ((userType !== "admin") &&
-            (userType !== "company"))
-            throw new Error(`This user does not have access to create an product`);
+        if (userType !== "admin")
+            throw new Error('This user does not have access to create an product');
 
         const productDetails = JSON.parse(args);
+        productDetails['txId'] = await ctx.stub.getTxID();
+        console.log('txIdCreate', productDetails['txId']);
 
         const productBuffer = await ctx.stub.getState(productDetails.productCode);
         if (productBuffer && productBuffer.length > 0) {
             throw new Error(`Error Message from createProduct. Product with productCode = ${productDetails.productCode} already exists.`);
         }
+        
+        const product = Product.deserializeProduct(JSON.stringify(productDetails));
 
-        const product = Product.deserializeProduct(args);
-        const userId = await this.getCurrentUserId(ctx);
-        const cipherProduct = this.encrypt(JSON.stringify(product), userId);
-
+        // Cipher
+        const cipherProduct = this.encrypt(JSON.stringify(product), 'admin', 'product');
         await ctx.stub.putState(product.getProductCode(), Product.toBuffer(cipherProduct));
-
-        try {
-            await ctx.stub.setEvent(EVENT_NAME, Product.toBuffer(cipherProduct));
-        }
-        catch (error) {
-            console.log("Error in sending createProduct event");
-        }
+        await ctx.stub.setEvent(EVENT_NAME, Product.toBuffer(cipherProduct));
+        
+        // Plain
+        // await ctx.stub.putState(product.getProductCode(), Product.toBuffer(product));
+        // await ctx.stub.setEvent(EVENT_NAME, Product.toBuffer(product));
 
         return {
             status: 'Successfully create a product',
-            cipherProduct: `${cipherProduct}`
+            result: cipherProduct
         };
     }
 
@@ -188,58 +139,34 @@ class ProductContract extends Contract {
         }
         
         const productBuffer = await ctx.stub.getState(productCode);
-
         if (!productBuffer || productBuffer.length === 0) {
             throw new Error(`Error Message from readProduct. Product with productCode = ${productCode} does not exists.`);
         }
         
+        // Cipher
         const cipherProduct = JSON.parse(productBuffer);
-        const userId = await this.getCurrentUserId(ctx);
-        const decipherProduct = this.decrypt(cipherProduct, userId);
+        const decipherProduct = this.decrypt(cipherProduct, 'admin');
         const product = Product.deserializeProduct(decipherProduct);
 
-        if ((userId !== "admin")
-            && (userId !== product.getCompanyId()))
-            throw new Error(`${userId} does not have access to the details of product ${productCode}`);
-
-        try {
-            await ctx.stub.setEvent(EVENT_NAME, Product.toBuffer(product));
-        }
-        catch (error) {
-            console.log("Error in sending readProduct event");
-        }
+        // Plain
+        // const product = Product.deserializeProduct(productBuffer);
 
         return {
             status: 'Successfully read a product',
-            product: product
+            result: product
         };
     }
 
     async readAllProducts(ctx) {
-        const userId = await this.getCurrentUserId(ctx);
         const userType = await this.getCurrentUserType(ctx);
+        if (userType !== "admin")
+            throw new Error(`This user does not have access to read all products.`);
         
-        let queryString;
-        switch (userType) {
-            case "admin": {
-                queryString = {
-                    "selector": {}
-                }
-                break;
+        const queryString = {
+            "selector": {
+                "objectType": 'product',
             }
-            case "company": {
-                queryString = {
-                    "selector": {
-                        "companyId": userId,
-                    }
-                }
-                break;
-            }
-            default: {
-                return [];
-            }
-        }
-
+        };
         const iterator = await ctx.stub.getQueryResult(JSON.stringify(queryString));
         const allProducts = [];
         while (true) {
@@ -249,6 +176,9 @@ class ProductContract extends Contract {
                 let Record;
                 try {
                     Record = JSON.parse(product.value.value.toString('utf8'));
+                    
+                    // Cipher
+                    Record.detail = JSON.parse(this.decrypt(Record, 'admin'));
                 } catch (err) {
                     console.log(err);
                     Record = product.value.value.toString('utf8');
@@ -260,19 +190,19 @@ class ProductContract extends Contract {
                 await iterator.close();
                 return {
                     status: 'Successfully read all products',
-                    allProducts: allProducts
+                    result: allProducts
                 };
             }
         }
     }
 
-    async readProductHistory(ctx, productCode) {
-        if (productCode.length < 1) {
-            throw new Error('productCode is required as input')
+    async readStateHistory(ctx, stateKey) {
+        if (stateKey.length < 1) {
+            throw new Error('State key is required as input.');
         }
 
-        const iterator = await ctx.stub.getHistoryForKey(productCode);
-        const productHistory = [];
+        const iterator = await ctx.stub.getHistoryForKey(stateKey);
+        const stateHistory = [];
         while (true) {
             const history = await iterator.next();
             
@@ -287,42 +217,47 @@ class ProductContract extends Contract {
                 
                 try {
                     jsonRes.Value = JSON.parse(history.value.value.toString('utf8'));
+
+                    // Cipher
+                    jsonRes.Value.detail = JSON.parse(this.decrypt(jsonRes.Value, 'admin'));
                 } catch (err) {
                     console.log(err);
                     jsonRes.Value = history.value.value.toString('utf8');
                 }
 
-                productHistory.push(jsonRes);
+                stateHistory.push(jsonRes);
             }
 
             if (history.done) {
                 await iterator.close();
                 return {
-                    status: 'Successfully read a product history',
-                    productHistory: productHistory
+                    status: 'Successfully read state history',
+                    result: stateHistory
                 };
             }
         }
     }
 
     async updateProduct(ctx, args) {
+        const userType = await this.getCurrentUserType(ctx);
+        if (userType !== "admin")
+            throw new Error('This user does not have access to update a product detail.');
+
         const productDetails = JSON.parse(args);
         const productBuffer = await ctx.stub.getState(productDetails.productCode);
         if (!productBuffer || productBuffer.length === 0) {
             throw new Error(`Error Message from updateProduct: Product with productCode = ${productDetails.productCode} does not exist.`);
         }
 
-        let cipherProduct = JSON.parse(productBuffer);
-        const userId = await this.getCurrentUserId(ctx);
-        const decipherProduct = this.decrypt(cipherProduct, userId);
-        let product = Product.deserializeProduct(decipherProduct);
-        if ((userId !== "admin") &&
-            (userId !== product.getCompanyId()))
-            throw new Error(`${userId} does not have access to update details for product ${product.getProductCode()}`);
+        // Cipher
+        const cipherProduct = JSON.parse(productBuffer);
+        const decipherProduct = this.decrypt(cipherProduct, 'admin');
+        decipherProduct['txId'] = await ctx.stub.getTxID();
+        const product = Product.deserializeProduct(decipherProduct);
 
-        if (product.getProductBrand() !== productDetails.productBrand) {
-            product.setProductBrand(productDetails.productBrand);
-        }
+        // Plain
+        // const product = Product.deserializeProduct(productBuffer);
+
         if (product.getProductName() !== productDetails.productName) {
             product.setProductName(productDetails.productName);
         }
@@ -338,56 +273,41 @@ class ProductContract extends Contract {
         if (product.getProductDescription() !== productDetails.productDescription) {
             product.setProductDescription(productDetails.productDescription);
         }
-        if (product.getProductImageHash() !== productDetails.productImageHash) {
-            product.setProductImageHash(productDetails.productImageHash);
+        if (product.getProductImageBase64() !== productDetails.productImageBase64) {
+            product.setProductImageBase64(productDetails.productImageBase64);
         }
-        if (product.getProductImageLink() !== productDetails.productImageLink) {
-            product.setProductImageLink(productDetails.productImageLink);
-        }
-
-        cipherProduct = this.encrypt(JSON.stringify(product), userId);
-
+        
+        // Cipher
+        cipherProduct = this.encrypt(JSON.stringify(product), 'admin', 'product');
         await ctx.stub.putState(product.getProductCode(), Product.toBuffer(cipherProduct));
-
-        try {
-            await ctx.stub.setEvent(EVENT_NAME, Product.toBuffer(cipherProduct));
-        }
-        catch (error) {
-            console.log("Error in sending updateProduct event");
-        }
+        await ctx.stub.setEvent(EVENT_NAME, Product.toBuffer(cipherProduct));
+        
+        // Plain
+        // await ctx.stub.putState(product.getProductCode(), Product.toBuffer(product));
+        // await ctx.stub.setEvent(EVENT_NAME, Product.toBuffer(product));
 
         return {
             status: 'Successfully update a product',
-            product: cipherProduct
+            result: cipherProduct
         };
     }
 
     async deleteProduct(ctx, productCode) {
+        const userType = await this.getCurrentUserType(ctx);
+        if (userType !== "admin")
+            throw new Error('This user ddoes not have access to delete a product.');
+
         if (productCode.length < 1) {
-            throw new Error('productCode required as input')
+            throw new Error('productCode required as input');
         }
 
-        let productBuffer = await ctx.stub.getState(productCode);
+        const productBuffer = await ctx.stub.getState(productCode);
         if (!productBuffer || productBuffer.length === 0) {
             throw new Error(`Error Message from deleteProduct: Product with productCode = ${productCode} does not exist.`);
         }
 
-        const cipherProduct = JSON.parse(productBuffer);
-        const userId = await this.getCurrentUserId(ctx);
-        const decipherProduct = this.decrypt(cipherProduct, userId);
-        const product = Product.deserializeProduct(decipherProduct);
-        if ((userId !== "admin")
-            && (userId !== product.getCompanyId()))
-            throw new Error(`${userId} does not have access to delete product ${product.getProductCode()}`);
-
-        await ctx.stub.deleteState(product.getProductCode());
-
-        try {
-            await ctx.stub.setEvent(EVENT_NAME, productCode);
-        }
-        catch (error) {
-            console.log("Error in sending deleteProduct event");
-        }
+        await ctx.stub.deleteState(productCode);
+        await ctx.stub.setEvent(EVENT_NAME, productCode);
 
         return {
             status: 'Successfully delete a product',
@@ -411,54 +331,204 @@ class ProductContract extends Contract {
         return ctx.clientIdentity.getAttributeValue("usertype");
     }
 
-    async getCurrentUserMspId(ctx) {
-        const mspId = ctx.clientIdentity.getMSPID();
-        return mspId;
-    }
-
     async getTokenDetail(ctx) {
         const tokenBuffer = await ctx.stub.getState('token');
         if (!tokenBuffer || tokenBuffer.length === 0) {
             throw new Error(`Error Message from getTokenDetail: token does not exist.`);
         }
         
-        const token = ERC20Token.deserializeToken(tokenBuffer);
-        const mspId = await this.getCurrentUserMspId(ctx);
+        // Cipher
+        const cipherToken = JSON.parse(tokenBuffer);
+        const decipherToken = this.decrypt(cipherToken, 'admin');
+        const token = ERC20Token.deserializeToken(decipherToken);
+
+        // Plain
+        // const token = ERC20Token.deserializeToken(tokenBuffer);
+        
+        const userId = await this.getCurrentUserId(ctx);
         const tokenDetails = {
             name: `${token.getName()}`,
             symbol: `${token.getSymbol()}`,
             decimals: token.getDecimals(),
             owner: `${token.getOwner()}`,
-            balanceOf: token.getBalanceOf(mspId) ? token.getBalanceOf(mspId) : 'undefined'
+            balance: token.getBalanceOf(userId) ? token.getBalanceOf(userId) : 'undefined'
         };
-        if (mspId === token.getOwner()) {
+        if (userId === token.getOwner()) {
             tokenDetails['totalSupply'] = token.getTotalSupply();
         }
 
         return {
-            status: 'Successfully get token detail',
-            token: tokenDetails
+            status: 'Successfully get token details',
+            result: tokenDetails
         };
     }
 
-    async transferToken(ctx){
+    async transferToken(ctx, args){
+        const transferDetails = JSON.parse(args);
+        const tokenBuffer = await ctx.stub.getState('token');
+        if (!tokenBuffer || tokenBuffer.length === 0) {
+            throw new Error(`Error Message from getTokenDetail: token does not exist.`);
+        }
+        
+        // Cipher
+        const cipherToken = JSON.parse(tokenBuffer);
+        const decipherToken = this.decrypt(cipherToken, 'admin');
+        const token = ERC20Token.deserializeToken(decipherToken);
 
+        // Plain
+        // const token = ERC20Token.deserializeToken(tokenBuffer);
+        
+        const userId = await this.getCurrentUserId(ctx);
+        token.transfer(userId, transferDetails.receiver, transferDetails.value);
+        
+        // Cipher
+        const newCipherToken = this.encrypt(JSON.stringify(token), 'admin', 'token');
+        await ctx.stub.putState('token', ERC20Token.toBuffer(newCipherToken));
+        await ctx.stub.setEvent(EVENT_NAME, ERC20Token.toBuffer(newCipherToken));
+
+        // Plain
+        // await ctx.stub.putState('token', ERC20Token.toBuffer(token));
+        // await ctx.stub.setEvent(EVENT_NAME, ERC20Token.toBuffer(token));
+
+        return {
+            status: 'Successfully transfer tokens',
+            result: {
+                balance: token.getBalanceOf(userId)
+            }
+        };
     }
 
-    async transferFromToken(ctx){
+    async transferFromToken(ctx, args){
+        const transferFromDetails = JSON.parse(args);
+        const tokenBuffer = await ctx.stub.getState('token');
+        if (!tokenBuffer || tokenBuffer.length === 0) {
+            throw new Error(`Error Message from getTokenDetail: token does not exist.`);
+        }
         
+        // Cipher
+        const cipherToken = JSON.parse(tokenBuffer);
+        const decipherToken = this.decrypt(cipherToken, 'admin');
+        const token = ERC20Token.deserializeToken(decipherToken);
+
+        // Plain
+        // const token = ERC20Token.deserializeToken(tokenBuffer);
+        
+        const userId = await this.getCurrentUserId(ctx);
+        token.transferFrom(userId, transferFromDetails.owner, transferFromDetails.receiver, transferFromDetails.value);
+        
+        // Cipher
+        const newCipherToken = this.encrypt(JSON.stringify(token), 'admin', 'token');
+        await ctx.stub.putState('token', ERC20Token.toBuffer(newCipherToken));
+        await ctx.stub.setEvent(EVENT_NAME, ERC20Token.toBuffer(newCipherToken));
+
+        // Plain
+        // await ctx.stub.putState('token', ERC20Token.toBuffer(token));
+        // await ctx.stub.setEvent(EVENT_NAME, ERC20Token.toBuffer(token));
+
+        return {
+            status: 'Successfully transfer tokens from owner',
+            result: {
+                allowance: token.getAllowance(userId, transferFromDetails.owner)
+            }
+        };
     }
 
-    async approveToken(ctx){
+    async approveToken(ctx, args){
+        const approveDetails = JSON.parse(args);
+        const tokenBuffer = await ctx.stub.getState('token');
+        if (!tokenBuffer || tokenBuffer.length === 0) {
+            throw new Error(`Error Message from getTokenDetail: token does not exist.`);
+        }
         
+        // Cipher
+        const cipherToken = JSON.parse(tokenBuffer);
+        const decipherToken = this.decrypt(cipherToken, 'admin');
+        const token = ERC20Token.deserializeToken(decipherToken);
+
+        // Plain
+        // const token = ERC20Token.deserializeToken(tokenBuffer);
+        
+        const userId = await this.getCurrentUserId(ctx);
+        token.approve(userId, approveDetails.spender, approveDetails.value);
+        
+        // Cipher
+        const newCipherToken = this.encrypt(JSON.stringify(token), 'admin', 'token');
+        await ctx.stub.putState('token', ERC20Token.toBuffer(newCipherToken));
+        await ctx.stub.setEvent(EVENT_NAME, ERC20Token.toBuffer(newCipherToken));
+
+        // Plain
+        // await ctx.stub.putState('token', ERC20Token.toBuffer(token));
+        // await ctx.stub.setEvent(EVENT_NAME, ERC20Token.toBuffer(token));
+
+        return {
+            status: 'Successfully approve tokens',
+            result: {
+                allowance: token.getAllowance(approveDetails.spender, userId)
+            }
+        };
     }
 
-    async getAllowanceToken(ctx){
+    async getAllowanceToken(ctx, owner){
+        const tokenBuffer = await ctx.stub.getState('token');
+        if (!tokenBuffer || tokenBuffer.length === 0) {
+            throw new Error(`Error Message from getTokenDetail: token does not exist.`);
+        }
         
+        // Cipher
+        const cipherToken = JSON.parse(tokenBuffer);
+        const decipherToken = this.decrypt(cipherToken, 'admin');
+        const token = ERC20Token.deserializeToken(decipherToken);
+
+        // Plain
+        // const token = ERC20Token.deserializeToken(tokenBuffer);
+        
+        const userId = await this.getCurrentUserId(ctx);
+
+        return {
+            status: 'Successfully get allowance tokens',
+            result: {
+                allowance: token.getAllowance(userId, owner)
+            }
+        };
     }
 
-    async mintToken(ctx){
+    async mintToken(ctx, args){
+        const userType = await this.getCurrentUserType(ctx);
+        if (userType !== "superadmin")
+            throw new Error('This user does not have access to mint tokens.');
+
+        const mintDetails = JSON.parse(args);
+        const tokenBuffer = await ctx.stub.getState('token');
+        if (!tokenBuffer || tokenBuffer.length === 0) {
+            throw new Error(`Error Message from getTokenDetail: token does not exist.`);
+        }
         
+        // Cipher
+        const cipherToken = JSON.parse(tokenBuffer);
+        const decipherToken = this.decrypt(cipherToken, 'admin');
+        const token = ERC20Token.deserializeToken(decipherToken);
+
+        // Plain
+        // const token = ERC20Token.deserializeToken(tokenBuffer);
+        
+        const userId = await this.getCurrentUserId(ctx);
+        token.mint(userId, mintDetails.value);
+
+        // Cipher
+        const newCipherToken = this.encrypt(JSON.stringify(token), 'admin', 'token');
+        await ctx.stub.putState('token', ERC20Token.toBuffer(newCipherToken));
+        await ctx.stub.setEvent(EVENT_NAME, ERC20Token.toBuffer(newCipherToken));
+        
+        // Plain
+        // await ctx.stub.putState('token', ERC20Token.toBuffer(token));
+        // await ctx.stub.setEvent(EVENT_NAME, ERC20Token.toBuffer(token));
+
+        return {
+            status: 'Successfully mint tokens',
+            result: {
+                totalSupply: token.getTotalSupply()
+            }
+        };
     }
 }
 
