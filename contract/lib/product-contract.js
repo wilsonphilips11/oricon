@@ -3,10 +3,25 @@
 const { Contract, Context } = require('fabric-contract-api');
 const Product = require('./product.js');
 const EVENT_NAME = "productContractEvent";
+
+// Crypto Modules
+const {K768_Encrypt, K768_Decrypt} = require('./crystals-kyber/index.js');
 const Crypto = require('crypto');
-const ERC20Token = require('./token/ERC20Token.js');
 const fs = require('fs');
-const {K768_KeyGen, K768_Encrypt, K768_Decrypt} = require('./crystals-kyber/index.js');
+
+// Token Composite Key Prefix
+const tokenNameKey = 'name';
+const tokenSymbolKey = 'symbol';
+const tokenDecimalsKey = 'decimals';
+const tokenTotalSupplyKey = 'totalSupply';
+const balanceKeyPrefix = 'balance';
+const allowanceKeyPrefix = 'allowance';
+
+// Token Init
+const tokenName = 'Product Authentication Token';
+const tokenSymbol = 'XYZ';
+const tokenDecimals = 3;
+const tokenTotalSupply = 0;
 
 class ProductContext extends Context {
     
@@ -82,50 +97,35 @@ class ProductContract extends Contract {
         return symKey;
     }
 
-    async init(ctx, args) {
-        const tokenDetails = JSON.parse(args);
-        const token = new ERC20Token(
-            tokenDetails.name,
-            tokenDetails.symbol, 
-            tokenDetails.decimals, 
-            tokenDetails.owner, 
-            tokenDetails.totalSupply, 
-            tokenDetails.balanceOf,  
-            tokenDetails.allowance
-        );
+    async init(ctx) {
+        const cipherTokenName = this.encrypt(tokenName, 'admin', 'token');
+        const cipherTokenSymbol = this.encrypt(tokenSymbol, 'admin', 'token');
+        const cipherTokenDecimals = this.encrypt(tokenDecimals.toString(), 'admin', 'token');
+        const cipherTotalSupply = this.encrypt(tokenTotalSupply.toString(), 'admin', 'token');
 
-        // Cipher
-        const cipherToken = this.encrypt(JSON.stringify(token), 'admin', 'token');
-        await ctx.stub.putState('token', ERC20Token.toBuffer(cipherToken));
-        
-        // Plain
-        // await ctx.stub.putState('token', ERC20Token.toBuffer(token));
+        await ctx.stub.putState(tokenNameKey, Buffer.from(JSON.stringify(cipherTokenName)));
+        await ctx.stub.putState(tokenSymbolKey, Buffer.from(JSON.stringify(cipherTokenSymbol)));
+        await ctx.stub.putState(tokenDecimalsKey, Buffer.from(JSON.stringify(cipherTokenDecimals)));
+        await ctx.stub.putState(tokenTotalSupplyKey, Buffer.from(JSON.stringify(cipherTotalSupply)));
     }
 
     async createProduct(ctx, args) {
         const userType = await this.getCurrentUserType(ctx);
-        if (userType !== "admin")
+        if (userType !== "admin") {
             throw new Error('This user does not have access to create an product');
+        }
 
         const productDetails = JSON.parse(args);
         productDetails['txId'] = await ctx.stub.getTxID();
-        console.log('txIdCreate', productDetails['txId']);
-
         const productBuffer = await ctx.stub.getState(productDetails.productCode);
         if (productBuffer && productBuffer.length > 0) {
             throw new Error(`Error Message from createProduct. Product with productCode = ${productDetails.productCode} already exists.`);
         }
         
         const product = Product.deserializeProduct(JSON.stringify(productDetails));
-
-        // Cipher
         const cipherProduct = this.encrypt(JSON.stringify(product), 'admin', 'product');
         await ctx.stub.putState(product.getProductCode(), Product.toBuffer(cipherProduct));
         await ctx.stub.setEvent(EVENT_NAME, Product.toBuffer(cipherProduct));
-        
-        // Plain
-        // await ctx.stub.putState(product.getProductCode(), Product.toBuffer(product));
-        // await ctx.stub.setEvent(EVENT_NAME, Product.toBuffer(product));
 
         return {
             status: 'Successfully create a product',
@@ -136,20 +136,15 @@ class ProductContract extends Contract {
     async readProduct(ctx, productCode) {
         if (productCode.length < 1) {
             throw new Error('productCode is required as input')
-        }
-        
+        } 
         const productBuffer = await ctx.stub.getState(productCode);
         if (!productBuffer || productBuffer.length === 0) {
             throw new Error(`Error Message from readProduct. Product with productCode = ${productCode} does not exists.`);
         }
         
-        // Cipher
         const cipherProduct = JSON.parse(productBuffer);
         const decipherProduct = this.decrypt(cipherProduct, 'admin');
         const product = Product.deserializeProduct(decipherProduct);
-
-        // Plain
-        // const product = Product.deserializeProduct(productBuffer);
 
         return {
             status: 'Successfully read a product',
@@ -168,16 +163,14 @@ class ProductContract extends Contract {
             }
         };
         const iterator = await ctx.stub.getQueryResult(JSON.stringify(queryString));
-        const allProducts = [];
+        let allProducts = [];
         while (true) {
-            const product = await iterator.next();
+            let product = await iterator.next();
             
             if (product.value && product.value.value.toString()) {
                 let Record;
                 try {
                     Record = JSON.parse(product.value.value.toString('utf8'));
-                    
-                    // Cipher
                     Record.detail = JSON.parse(this.decrypt(Record, 'admin'));
                 } catch (err) {
                     console.log(err);
@@ -190,49 +183,46 @@ class ProductContract extends Contract {
                 await iterator.close();
                 return {
                     status: 'Successfully read all products',
-                    result: allProducts
+                    result: (allProducts.length > 0) ? allProducts : 'No products added'
                 };
             }
         }
     }
 
-    async readStateHistory(ctx, stateKey) {
-        if (stateKey.length < 1) {
-            throw new Error('State key is required as input.');
+    async readProductHistory(ctx, productCode) {
+        if (productCode.length < 1) {
+            throw new Error('productCode is required as input.');
         }
 
-        const iterator = await ctx.stub.getHistoryForKey(stateKey);
-        const stateHistory = [];
+        const iterator = await ctx.stub.getHistoryForKey(productCode);
+        let productHistory = [];
         while (true) {
-            const history = await iterator.next();
+            let history = await iterator.next();
             
             if (history.value && history.value.value.toString()) {
                 let jsonRes = {};
                 jsonRes.TxId = history.value.tx_id;
                 jsonRes.IsDelete = history.value.is_delete.toString();
-                
                 let d = new Date(0);
                 d.setUTCSeconds(history.value.timestamp.seconds.low);
                 jsonRes.Timestamp = d.toLocaleString("en-US", { timeZone: "Asia/Jakarta" });
                 
                 try {
                     jsonRes.Value = JSON.parse(history.value.value.toString('utf8'));
-
-                    // Cipher
                     jsonRes.Value.detail = JSON.parse(this.decrypt(jsonRes.Value, 'admin'));
                 } catch (err) {
                     console.log(err);
                     jsonRes.Value = history.value.value.toString('utf8');
                 }
 
-                stateHistory.push(jsonRes);
+                productHistory.push(jsonRes);
             }
 
             if (history.done) {
                 await iterator.close();
                 return {
-                    status: 'Successfully read state history',
-                    result: stateHistory
+                    status: 'Successfully read a product history',
+                    result: productHistory
                 };
             }
         }
@@ -249,15 +239,11 @@ class ProductContract extends Contract {
             throw new Error(`Error Message from updateProduct: Product with productCode = ${productDetails.productCode} does not exist.`);
         }
 
-        // Cipher
         const cipherProduct = JSON.parse(productBuffer);
         const decipherProduct = this.decrypt(cipherProduct, 'admin');
         decipherProduct['txId'] = await ctx.stub.getTxID();
+        
         const product = Product.deserializeProduct(decipherProduct);
-
-        // Plain
-        // const product = Product.deserializeProduct(productBuffer);
-
         if (product.getProductName() !== productDetails.productName) {
             product.setProductName(productDetails.productName);
         }
@@ -277,15 +263,10 @@ class ProductContract extends Contract {
             product.setProductImageBase64(productDetails.productImageBase64);
         }
         
-        // Cipher
         cipherProduct = this.encrypt(JSON.stringify(product), 'admin', 'product');
         await ctx.stub.putState(product.getProductCode(), Product.toBuffer(cipherProduct));
         await ctx.stub.setEvent(EVENT_NAME, Product.toBuffer(cipherProduct));
         
-        // Plain
-        // await ctx.stub.putState(product.getProductCode(), Product.toBuffer(product));
-        // await ctx.stub.setEvent(EVENT_NAME, Product.toBuffer(product));
-
         return {
             status: 'Successfully update a product',
             result: cipherProduct
@@ -300,7 +281,6 @@ class ProductContract extends Contract {
         if (productCode.length < 1) {
             throw new Error('productCode required as input');
         }
-
         const productBuffer = await ctx.stub.getState(productCode);
         if (!productBuffer || productBuffer.length === 0) {
             throw new Error(`Error Message from deleteProduct: Product with productCode = ${productCode} does not exist.`);
@@ -320,6 +300,7 @@ class ProductContract extends Contract {
         const begin = id[0].indexOf("/CN=");
         const end = id[0].lastIndexOf("::/C=");
         const userid = id[0].substring(begin + 4, end);
+        
         return userid;
     }
 
@@ -328,205 +309,268 @@ class ProductContract extends Contract {
         if (userid === "admin") {
             return userid;
         }
+        
         return ctx.clientIdentity.getAttributeValue("usertype");
     }
 
-    async getTokenDetail(ctx) {
-        const tokenBuffer = await ctx.stub.getState('token');
-        if (!tokenBuffer || tokenBuffer.length === 0) {
-            throw new Error(`Error Message from getTokenDetail: token does not exist.`);
-        }
+    async getTokenDecimals(ctx) {
+        const tokenDecimalsBuffer = await ctx.stub.getState(tokenDecimalsKey);
+        const cipherTokenDecimals = JSON.parse(tokenDecimalsBuffer.toString());
+        const decipherTokenDecimals = parseInt(this.decrypt(cipherTokenDecimals, 'admin'));
         
-        // Cipher
-        const cipherToken = JSON.parse(tokenBuffer);
-        const decipherToken = this.decrypt(cipherToken, 'admin');
-        const token = ERC20Token.deserializeToken(decipherToken);
+        return decipherTokenDecimals;
+    }
 
-        // Plain
-        // const token = ERC20Token.deserializeToken(tokenBuffer);
+    async getBalanceOf(ctx, userId, zeroBalance = false) {
+        const balanceKey = ctx.stub.createCompositeKey(balanceKeyPrefix, [userId]);
+        const balanceBuffer = await ctx.stub.getState(balanceKey);
+        if (!balanceBuffer || balanceBuffer.length === 0) {
+            if (zeroBalance) {
+                return 0;
+            }
+            throw new Error(`${userId} account does not have balance.`);
+        }
+        const cipherBalance = JSON.parse(balanceBuffer.toString());
+        const decipherBalance = parseFloat(this.decrypt(cipherBalance, 'admin'));
+
+        return decipherBalance;
+    }
+
+    async getTotalSupply(ctx) {
+        const tokenTotalSupplyBuffer = await ctx.stub.getState(tokenTotalSupplyKey);
+        const cipherTokenSupply = JSON.parse(tokenTotalSupplyBuffer.toString());
+        const decipherTokenSupply = parseFloat(this.decrypt(cipherTokenSupply, 'admin'));
         
+        return decipherTokenSupply;
+    }
+
+    async getAllowance(ctx, owner, spender) {
+        const allowanceKey = ctx.stub.createCompositeKey(allowanceKeyPrefix, [owner, spender]);
+        const allowanceBuffer = await ctx.stub.getState(allowanceKey);
+        if (!allowanceBuffer || allowanceBuffer.length === 0) {
+            throw new Error(`Spender ${spender} has no allowance from ${owner}`);
+        }
+        const cipherTokenAllowance = JSON.parse(allowanceBuffer.toString());
+        const decipherTokenAllowance = parseFloat(this.decrypt(cipherTokenAllowance, 'admin'));
+        
+        return decipherTokenAllowance;
+    }
+
+    async getAllowanceToken(ctx) {
         const userId = await this.getCurrentUserId(ctx);
-        const tokenDetails = {
-            name: `${token.getName()}`,
-            symbol: `${token.getSymbol()}`,
-            decimals: token.getDecimals(),
-            owner: `${token.getOwner()}`,
-            balance: token.getBalanceOf(userId) ? token.getBalanceOf(userId) : 'undefined'
+        const iterator = await ctx.stub.getStateByPartialCompositeKey(allowanceKeyPrefix, [userId]);
+        let allowances = [];
+        while (true) {
+            let allowance = await iterator.next();
+
+            if (allowance.value && allowance.value.value.toString() && allowance.value.key) {
+                let objectType, attributes;
+                ({ objectType, attributes } = await ctx.stub.splitCompositeKey(allowance.value.key));       
+                let cipherTokenAllowance, decipherTokenAllowance;
+
+                try {
+                    cipherTokenAllowance = JSON.parse(allowance.value.value.toString('utf8'));
+                    decipherTokenAllowance = parseFloat(this.decrypt(cipherTokenAllowance, 'admin'));
+                } catch (err) {
+                    console.log(err);
+                    decipherTokenAllowance = allowance.value.value.toString('utf8');
+                }
+                
+                allowances.push({
+                    spender: attributes[1],
+                    value: decipherTokenAllowance
+                });
+            }
+
+            if (allowance.done) {
+                await iterator.close();
+                return {
+                    status: 'Successfully get allowances',
+                    result: (allowances.length > 0) ? allowances : 'No allowances given'
+                };
+            }
+        }
+    }
+
+    async getTokenDetails(ctx) {
+        const userId = await this.getCurrentUserId(ctx);
+        const tokenNameBuffer = await ctx.stub.getState(tokenNameKey);
+        const tokenSymbolBuffer = await ctx.stub.getState(tokenSymbolKey);
+        const tokenDecimalsBuffer = await ctx.stub.getState(tokenDecimalsKey);
+
+        const cipherTokenName = JSON.parse(tokenNameBuffer.toString());
+        const cipherTokenSymbol = JSON.parse(tokenSymbolBuffer.toString());
+        const cipherTokenDecimals = JSON.parse(tokenDecimalsBuffer.toString());
+
+        const decipherTokenName = this.decrypt(cipherTokenName, 'admin');
+        const decipherTokenSymbol = this.decrypt(cipherTokenSymbol, 'admin');
+        const decipherTokenDecimals = parseInt(this.decrypt(cipherTokenDecimals, 'admin'));
+
+        const currentUserBalance = await this.getBalanceOf(ctx, userId);
+        const totalSupply = await this.getTotalSupply(ctx);
+
+        const response = {
+            status: 'Successfully get token details',
+            result: {
+                tokenName: decipherTokenName,
+                tokenSymbol: decipherTokenSymbol,
+                tokenDecimals: decipherTokenDecimals,
+                tokenBalance: currentUserBalance,
+            }
         };
-        if (userId === token.getOwner()) {
-            tokenDetails['totalSupply'] = token.getTotalSupply();
+
+        if (userId === 'admin') {
+            response.result['totalSupply'] = totalSupply;
         }
 
-        return {
-            status: 'Successfully get token details',
-            result: tokenDetails
-        };
+        return response;
+    }
+
+    async transfer(ctx, sender, receiver, value, skipValueCheck = false) {
+        if (sender === receiver) {
+            throw new Error('Cannot transfer to and from same account');
+        }
+        if (!skipValueCheck) {
+            if (typeof(value) !== 'number' || value <= 0) {
+                throw new Error('Transfer amount must be positive number!');
+            }
+            const tokenDecimals = await this.getTokenDecimals(ctx);
+            value = parseFloat(value.toFixed(tokenDecimals));
+        }
+
+        let senderBalance = await this.getBalanceOf(ctx, sender);
+        if (senderBalance < value) {
+            throw new Error(`${sender} balance must be greater or equal to transfer value!`);
+        }
+
+        let receiverBalance = await this.getBalanceOf(ctx, receiver, true); 
+        senderBalance -= value;
+        senderBalance = parseFloat(senderBalance.toFixed(tokenDecimals));
+        receiverBalance += value;
+        receiverBalance = parseFloat(receiverBalance.toFixed(tokenDecimals));
+
+        const cipherSenderBalance = this.encrypt(senderBalance.toString(), 'admin', 'token');
+        const cipherReceiverBalance = this.encrypt(receiverBalance.toString(), 'admin', 'token');
+        const cipherSenderBalanceKey = ctx.stub.createCompositeKey(balanceKeyPrefix, [sender]);
+        const cipherReceiverBalanceKey = ctx.stub.createCompositeKey(balanceKeyPrefix, [receiver]);
+        
+        await ctx.stub.putState(cipherSenderBalanceKey, Buffer.from(JSON.stringify(cipherSenderBalance)));
+        await ctx.stub.putState(cipherReceiverBalanceKey, Buffer.from(JSON.stringify(cipherReceiverBalance)));
+        await ctx.stub.setEvent(EVENT_NAME, Buffer.from(JSON.stringify(cipherSenderBalance)));
+        await ctx.stub.setEvent(EVENT_NAME, Buffer.from(JSON.stringify(cipherReceiverBalance)));
+
+        return true;
     }
 
     async transferToken(ctx, args){
-        const transferDetails = JSON.parse(args);
-        const tokenBuffer = await ctx.stub.getState('token');
-        if (!tokenBuffer || tokenBuffer.length === 0) {
-            throw new Error(`Error Message from getTokenDetail: token does not exist.`);
-        }
-        
-        // Cipher
-        const cipherToken = JSON.parse(tokenBuffer);
-        const decipherToken = this.decrypt(cipherToken, 'admin');
-        const token = ERC20Token.deserializeToken(decipherToken);
-
-        // Plain
-        // const token = ERC20Token.deserializeToken(tokenBuffer);
-        
         const userId = await this.getCurrentUserId(ctx);
-        token.transfer(userId, transferDetails.receiver, transferDetails.value);
+        const transferDetails = JSON.parse(args);
         
-        // Cipher
-        const newCipherToken = this.encrypt(JSON.stringify(token), 'admin', 'token');
-        await ctx.stub.putState('token', ERC20Token.toBuffer(newCipherToken));
-        await ctx.stub.setEvent(EVENT_NAME, ERC20Token.toBuffer(newCipherToken));
-
-        // Plain
-        // await ctx.stub.putState('token', ERC20Token.toBuffer(token));
-        // await ctx.stub.setEvent(EVENT_NAME, ERC20Token.toBuffer(token));
+        const transferRes = await this.transfer(ctx, userId, transferDetails.receiver, transferDetails.value);
+        if (!transferRes) {
+            throw new Error('Failed to transfer');
+        }
 
         return {
             status: 'Successfully transfer tokens',
             result: {
-                balance: token.getBalanceOf(userId)
+                balance: await this.getBalanceOf(ctx, userId, true) - transferDetails.value
             }
         };
     }
 
     async transferFromToken(ctx, args){
-        const transferFromDetails = JSON.parse(args);
-        const tokenBuffer = await ctx.stub.getState('token');
-        if (!tokenBuffer || tokenBuffer.length === 0) {
-            throw new Error(`Error Message from getTokenDetail: token does not exist.`);
-        }
-        
-        // Cipher
-        const cipherToken = JSON.parse(tokenBuffer);
-        const decipherToken = this.decrypt(cipherToken, 'admin');
-        const token = ERC20Token.deserializeToken(decipherToken);
-
-        // Plain
-        // const token = ERC20Token.deserializeToken(tokenBuffer);
-        
         const userId = await this.getCurrentUserId(ctx);
-        token.transferFrom(userId, transferFromDetails.owner, transferFromDetails.receiver, transferFromDetails.value);
+        const transferFromDetails = JSON.parse(args);
+        let allowanceBalance = await this.getAllowance(ctx, transferFromDetails.owner, userId);
+        if (typeof(transferFromDetails.value) !== 'number' || transferFromDetails.value <= 0) {
+            throw new Error('Transfer from amount must be positive number!');
+        }
+        const tokenDecimals = await this.getTokenDecimals(ctx);
+        transferFromDetails.value = parseFloat(transferFromDetails.value.toFixed(tokenDecimals));
+        if (allowanceBalance < transferFromDetails.value) {
+            throw new Error(`${transferFromDetails.spender} allowance must be greater or equal to transfer from amount!`);
+        }
+
+        const transferRes = await this.transfer(ctx, transferFromDetails.owner, transferFromDetails.spender, transferFromDetails.value, true);
+        if (!transferRes) {
+            throw new Error('Failed to transfer');
+        }
+
+        allowanceBalance -=  transferFromDetails.value;
+        allowanceBalance = parseFloat(allowanceBalance.toFixed(tokenDecimals));
+        const cipherAllowanceBalance = this.encrypt(allowanceBalance.toString(), 'admin', 'token');
+        const allowanceKey = ctx.stub.createCompositeKey(allowanceKeyPrefix, [transferFromDetails.owner, userId]);
+        await ctx.stub.putState(allowanceKey, Buffer.from(JSON.stringify(cipherAllowanceBalance)));
+        await ctx.stub.setEvent(EVENT_NAME, Buffer.from(JSON.stringify(cipherAllowanceBalance)));
         
-        // Cipher
-        const newCipherToken = this.encrypt(JSON.stringify(token), 'admin', 'token');
-        await ctx.stub.putState('token', ERC20Token.toBuffer(newCipherToken));
-        await ctx.stub.setEvent(EVENT_NAME, ERC20Token.toBuffer(newCipherToken));
-
-        // Plain
-        // await ctx.stub.putState('token', ERC20Token.toBuffer(token));
-        // await ctx.stub.setEvent(EVENT_NAME, ERC20Token.toBuffer(token));
-
         return {
             status: 'Successfully transfer tokens from owner',
             result: {
-                allowance: token.getAllowance(userId, transferFromDetails.owner)
+                owner: transferFromDetails.owner,
+                allowance: allowanceBalance
             }
         };
     }
 
     async approveToken(ctx, args){
-        const approveDetails = JSON.parse(args);
-        const tokenBuffer = await ctx.stub.getState('token');
-        if (!tokenBuffer || tokenBuffer.length === 0) {
-            throw new Error(`Error Message from getTokenDetail: token does not exist.`);
-        }
-        
-        // Cipher
-        const cipherToken = JSON.parse(tokenBuffer);
-        const decipherToken = this.decrypt(cipherToken, 'admin');
-        const token = ERC20Token.deserializeToken(decipherToken);
-
-        // Plain
-        // const token = ERC20Token.deserializeToken(tokenBuffer);
-        
         const userId = await this.getCurrentUserId(ctx);
-        token.approve(userId, approveDetails.spender, approveDetails.value);
-        
-        // Cipher
-        const newCipherToken = this.encrypt(JSON.stringify(token), 'admin', 'token');
-        await ctx.stub.putState('token', ERC20Token.toBuffer(newCipherToken));
-        await ctx.stub.setEvent(EVENT_NAME, ERC20Token.toBuffer(newCipherToken));
+        const approveDetails = JSON.parse(args);
+        if (userId === approveDetails.spender) {
+            throw new Error('Cannot approve to same account');
+        }
+        if (typeof(approveDetails.value) !== 'number' || approveDetails.value <= 0) {
+            throw new Error('Approval amount must be positive number!');
+        }
+        const tokenDecimals = await this.getTokenDecimals(ctx);
+        approveDetails.value = parseFloat(approveDetails.value.toFixed(tokenDecimals));
+        const ownerTokenBalance = await this.getBalanceOf(ctx, userId);
+        if (ownerTokenBalance < approveDetails.value) {
+            throw new Error(`${userId} balance must be greater or equal to approve amount!`);
+        }
 
-        // Plain
-        // await ctx.stub.putState('token', ERC20Token.toBuffer(token));
-        // await ctx.stub.setEvent(EVENT_NAME, ERC20Token.toBuffer(token));
+        const allowanceKey = ctx.stub.createCompositeKey(allowanceKeyPrefix, [userId, approveDetails.spender]);
+        const cipherAllowance = this.encrypt(approveDetails.value.toString(), 'admin', 'token');
+        await ctx.stub.putState(allowanceKey, Buffer.from(JSON.stringify(cipherAllowance)));
+        await ctx.stub.setEvent(EVENT_NAME, Buffer.from(JSON.stringify(cipherAllowance)));
 
         return {
             status: 'Successfully approve tokens',
             result: {
-                allowance: token.getAllowance(approveDetails.spender, userId)
-            }
-        };
-    }
-
-    async getAllowanceToken(ctx, owner){
-        const tokenBuffer = await ctx.stub.getState('token');
-        if (!tokenBuffer || tokenBuffer.length === 0) {
-            throw new Error(`Error Message from getTokenDetail: token does not exist.`);
-        }
-        
-        // Cipher
-        const cipherToken = JSON.parse(tokenBuffer);
-        const decipherToken = this.decrypt(cipherToken, 'admin');
-        const token = ERC20Token.deserializeToken(decipherToken);
-
-        // Plain
-        // const token = ERC20Token.deserializeToken(tokenBuffer);
-        
-        const userId = await this.getCurrentUserId(ctx);
-
-        return {
-            status: 'Successfully get allowance tokens',
-            result: {
-                allowance: token.getAllowance(userId, owner)
+                allowance: approveDetails.value
             }
         };
     }
 
     async mintToken(ctx, args){
-        const userType = await this.getCurrentUserType(ctx);
-        if (userType !== "superadmin")
-            throw new Error('This user does not have access to mint tokens.');
-
-        const mintDetails = JSON.parse(args);
-        const tokenBuffer = await ctx.stub.getState('token');
-        if (!tokenBuffer || tokenBuffer.length === 0) {
-            throw new Error(`Error Message from getTokenDetail: token does not exist.`);
-        }
-        
-        // Cipher
-        const cipherToken = JSON.parse(tokenBuffer);
-        const decipherToken = this.decrypt(cipherToken, 'admin');
-        const token = ERC20Token.deserializeToken(decipherToken);
-
-        // Plain
-        // const token = ERC20Token.deserializeToken(tokenBuffer);
-        
         const userId = await this.getCurrentUserId(ctx);
-        token.mint(userId, mintDetails.value);
+        const userType = await this.getCurrentUserType(ctx);
+        if (userType !== "admin")
+            throw new Error('This user does not have access to mint tokens.');
+        const mintDetails = JSON.parse(args);
+        if (typeof(mintDetails.value) !== 'number' || mintDetails.value <= 0) {
+            throw new Error('Mint amount must be positive number!');
+        }
+        const tokenDecimals = await this.getTokenDecimals(ctx);
+        mintDetails.value = parseFloat(mintDetails.value.toFixed(tokenDecimals));
 
-        // Cipher
-        const newCipherToken = this.encrypt(JSON.stringify(token), 'admin', 'token');
-        await ctx.stub.putState('token', ERC20Token.toBuffer(newCipherToken));
-        await ctx.stub.setEvent(EVENT_NAME, ERC20Token.toBuffer(newCipherToken));
-        
-        // Plain
-        // await ctx.stub.putState('token', ERC20Token.toBuffer(token));
-        // await ctx.stub.setEvent(EVENT_NAME, ERC20Token.toBuffer(token));
+        let minterBalance = await this.getBalanceOf(ctx, userId, true);
+        minterBalance += mintDetails.value;
+        const cipherMinterBalance = this.encrypt(minterBalance.toString(), 'admin', 'token');
+        const minterBalanceKey = ctx.stub.createCompositeKey(balanceKeyPrefix, [userId]);
+        await ctx.stub.putState(minterBalanceKey, Buffer.from(JSON.stringify(cipherMinterBalance)));
+        await ctx.stub.setEvent(EVENT_NAME, Buffer.from(JSON.stringify(cipherMinterBalance)));
+
+        let tokenTotalSupply = await this.getTotalSupply(ctx);
+        tokenTotalSupply += mintDetails.value;
+        const cipherTokenTotalSupply = this.encrypt(tokenTotalSupply.toString(), 'admin', 'token');
+        await ctx.stub.putState(tokenTotalSupplyKey, Buffer.from(JSON.stringify(cipherTokenTotalSupply)));
+        await ctx.stub.setEvent(EVENT_NAME, Buffer.from(cipherTokenTotalSupply.toString()));
 
         return {
             status: 'Successfully mint tokens',
             result: {
-                totalSupply: token.getTotalSupply()
+                totalSupply: tokenTotalSupply
             }
         };
     }

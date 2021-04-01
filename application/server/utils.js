@@ -3,8 +3,10 @@
 // Bring key classes into scope, most importantly Fabric SDK network class
 const fs = require('fs');
 const path = require('path');
-const { FileSystemWallet, Gateway, User, X509WalletMixin } = require('fabric-network');
+const { FileSystemWallet, Gateway, X509WalletMixin } = require('fabric-network');
 const FabricCAServices = require('fabric-ca-client');
+
+// Crypto Modules
 const {K768_Decrypt} = require('../../contract/lib/crystals-kyber/index.js');
 const Crypto = require('crypto');
 
@@ -18,10 +20,8 @@ var bLocalHost;
 var ccp;
 var orgMSPID;
 const EVENT_TYPE = "productContractEvent";  //  HLFabric EVENT
-
 const SUCCESS = 0;
 const utils = {};
-const { inspect } = require('util');
 
 utils.prepareErrorResponse = (error, code, message) => {
     let errorMsg;
@@ -319,7 +319,7 @@ utils.enrollUser = async (userid, userpwd, usertype) => {
 
     return ca.enroll(newUserDetails).then(enrollment => {
         //console.log("\n Successful enrollment; Data returned by enroll", enrollment.certificate);
-        var identity = X509WalletMixin.createIdentity(orgMSPID, enrollment.certificate, enrollment.key.toBytes());
+        var identity = X509WalletMixin.createIdentity(orgs[orgMSPID].mspid, enrollment.certificate, enrollment.key.toBytes());
         return wallet.import(userid, identity).then(notused => {
             return {
                 status: 'Successfully enroll user and import into the wallet!'

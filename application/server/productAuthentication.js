@@ -4,22 +4,13 @@ const express = require('express');
 const utils = require('./utils.js');
 const productAuthenticationRouter = express.Router();
 
-const Product = require('../../contract/lib/product.js');
-
 const STATUS_SUCCESS = 200;
 const STATUS_CLIENT_ERROR = 400;
 const STATUS_SERVER_ERROR = 500;
-
 const USER_NOT_ENROLLED = 1000;
 const INVALID_HEADER = 1001;
-
 const SUCCESS = 0;
 const PRODUCT_NOT_FOUND = 2000;
-
-const log4js = require('log4js');
-const logger = log4js.getLogger('Helper');
-logger.level = 'DEBUG';
-const { inspect } = require('util');
 
 async function getUsernamePassword(request) {
     if (!request.headers.authorization || request.headers.authorization.indexOf('Basic ') === -1) {
@@ -139,8 +130,8 @@ productAuthenticationRouter.route('/products').get(function (request, response) 
         });
 });
 
-productAuthenticationRouter.route('/state-history/:stateKey').get(function (request, response) {
-    evalTx(request, 'readStateHistory', request.params.stateKey)
+productAuthenticationRouter.route('/product-history/:productCode').get(function (request, response) {
+    evalTx(request, 'readProductHistory', request.params.productCode)
         .then((result) => {
             console.log('\nProcess productHistory transaction.');
             response.status(STATUS_SUCCESS);
@@ -148,7 +139,7 @@ productAuthenticationRouter.route('/state-history/:stateKey').get(function (requ
         }, (error) => {
             response.status(STATUS_SERVER_ERROR);
             response.send(utils.prepareErrorResponse(error, STATUS_SERVER_ERROR,
-                "There was a problem fetching history for product, ", request.params.stateKey));
+                "There was a problem fetching history for product, ", request.params.productCode));
         });
 });
 
@@ -179,7 +170,7 @@ productAuthenticationRouter.route('/delete-product/:productCode').delete(functio
 });
 
 productAuthenticationRouter.route('/token-detail').get(function (request, response) {
-    evalTx(request, 'getTokenDetail')
+    evalTx(request, 'getTokenDetails')
         .then((result) => {
             console.log('\nProcess getTokenDetail transaction.');
             response.status(STATUS_SUCCESS);
@@ -230,8 +221,8 @@ productAuthenticationRouter.route('/approve-token').put(function (request, respo
         });
 });
 
-productAuthenticationRouter.route('/allowance-token/:owner').get(function (request, response) {
-    evalTx(request, 'getAllowanceToken', request.params.owner)
+productAuthenticationRouter.route('/allowance-token').get(function (request, response) {
+    evalTx(request, 'getAllowanceToken')
         .then((result) => {
             console.log('\nProcess getAllowanceToken transaction.');
             response.status(STATUS_SUCCESS);

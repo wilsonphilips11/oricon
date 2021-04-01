@@ -13,7 +13,8 @@ const ccpPath = path.resolve(__dirname, '..', 'connection-org1.json');
 const ccpJSON = fs.readFileSync(ccpPath, 'utf8');
 const ccp = JSON.parse(ccpJSON);
 
-const {K768_KeyGen, K768_Encrypt, K768_Decrypt} = require('crystals-kyber');
+// Crypto Modules
+const {K768_KeyGen} = require('../../contract/lib/crystals-kyber');
 
 async function main() {
     try {
