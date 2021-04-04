@@ -5,9 +5,10 @@ const Product = require('./product.js');
 const EVENT_NAME = "productContractEvent";
 
 // Crypto Modules
-const {K768_Encrypt, K768_Decrypt} = require('./crystals-kyber/index.js');
+const {Kyber_Encrypt, Kyber_Decrypt} = require('./crystals-kyber/index.js');
 const Crypto = require('crypto');
 const fs = require('fs');
+const util = require('util');
 
 // Token Composite Key Prefix
 const tokenNameKey = 'name';
@@ -41,8 +42,8 @@ class ProductContract extends Contract {
         return new ProductContext();
     }
 
-    encrypt(data, userId, objectType) {
-        const cipher_symKey = this.pqEncrypt(userId);
+    encrypt(data, userId, objectType, keySize) {
+        const cipher_symKey = this.pqEncrypt(userId, keySize);
         const symBuffer = Buffer.from(cipher_symKey[1]);
         
         const cipher = Crypto.createCipher('aes256', symBuffer);  
@@ -52,23 +53,24 @@ class ProductContract extends Contract {
         return {
             'detail': encrypted,
             'cipherKey': cipher_symKey[0],
-            'objectType': `${objectType}`
+            'objectType': `${objectType}`,
+            'keySize': keySize
         };
     }
 
-    decrypt(data, userId) {
-        const symKey = this.pqDecrypt(data.cipherKey, userId);
+    decrypt(data, userId, keySize) {
+        const symKey = this.pqDecrypt(data.cipherKey, userId, keySize);
         const symBuffer = Buffer.from(symKey);
         
-        const decipher = Crypto.createDecipher('aes256', symBuffer);    
+        const decipher = Crypto.createDecipher('aes256', symBuffer);   
         let decrypted = decipher.update(data.detail, 'hex', 'utf8');
         decrypted += decipher.final('utf8');
 
         return decrypted.toString();
     }
 
-    pqEncrypt(userId) {
-        const userWallet = require.resolve(`./wallet/${userId}/pk-K768.txt`);
+    pqEncrypt(userId, keySize) {
+        const userWallet = require.resolve(`./wallet/${userId}/pk-K${keySize}.txt`);
         let publicKey;
         try {
             publicKey = fs.readFileSync(`${userWallet}`, 'utf8');
@@ -76,14 +78,15 @@ class ProductContract extends Contract {
           } catch (err) {
             console.error('Error: ', err);
         }
+        // console.log('publicKey', util.inspect(publicKey, { maxArrayLength: null }));
         
-        const cipher_symKey = K768_Encrypt(publicKey);
+        const cipher_symKey = Kyber_Encrypt(publicKey, keySize);
 
         return cipher_symKey;
     }
 
-    pqDecrypt(cipherKey, userId) {
-        const userWallet = require.resolve(`./wallet/${userId}/sk-K768.txt`);
+    pqDecrypt(cipherKey, userId, keySize) {
+        const userWallet = require.resolve(`./wallet/${userId}/sk-K${keySize}.txt`);
         let secretKey;
         try {
             secretKey = fs.readFileSync(`${userWallet}`, 'utf8');
@@ -91,17 +94,18 @@ class ProductContract extends Contract {
           } catch (err) {
             console.error('Error: ', err);
         }
+        // console.log('secretKey in util.inspect', util.inspect(secretKey, { maxArrayLength: null }));
         
-        const symKey = K768_Decrypt(cipherKey,secretKey);
-
+        const symKey = Kyber_Decrypt(cipherKey,secretKey, keySize);  
         return symKey;
     }
 
     async init(ctx) {
-        const cipherTokenName = this.encrypt(tokenName, 'admin', 'token');
-        const cipherTokenSymbol = this.encrypt(tokenSymbol, 'admin', 'token');
-        const cipherTokenDecimals = this.encrypt(tokenDecimals.toString(), 'admin', 'token');
-        const cipherTotalSupply = this.encrypt(tokenTotalSupply.toString(), 'admin', 'token');
+        const keySize = 768;
+        const cipherTokenName = this.encrypt(tokenName, 'admin', 'token', keySize);
+        const cipherTokenSymbol = this.encrypt(tokenSymbol, 'admin', 'token', keySize);
+        const cipherTokenDecimals = this.encrypt(tokenDecimals.toString(), 'admin', 'token', keySize);
+        const cipherTotalSupply = this.encrypt(tokenTotalSupply.toString(), 'admin', 'token', keySize);
 
         await ctx.stub.putState(tokenNameKey, Buffer.from(JSON.stringify(cipherTokenName)));
         await ctx.stub.putState(tokenSymbolKey, Buffer.from(JSON.stringify(cipherTokenSymbol)));
@@ -116,6 +120,7 @@ class ProductContract extends Contract {
         }
 
         const productDetails = JSON.parse(args);
+        const keySize = productDetails.keySize;
         productDetails['txId'] = await ctx.stub.getTxID();
         const productBuffer = await ctx.stub.getState(productDetails.productCode);
         if (productBuffer && productBuffer.length > 0) {
@@ -123,7 +128,7 @@ class ProductContract extends Contract {
         }
         
         const product = Product.deserializeProduct(JSON.stringify(productDetails));
-        const cipherProduct = this.encrypt(JSON.stringify(product), 'admin', 'product');
+        const cipherProduct = this.encrypt(JSON.stringify(product), 'admin', 'product', keySize);
         await ctx.stub.putState(product.getProductCode(), Product.toBuffer(cipherProduct));
         await ctx.stub.setEvent(EVENT_NAME, Product.toBuffer(cipherProduct));
 
@@ -133,7 +138,7 @@ class ProductContract extends Contract {
         };
     }
 
-    async readProduct(ctx, productCode) {
+    async readProduct(ctx, productCode, keySize = 768) {
         if (productCode.length < 1) {
             throw new Error('productCode is required as input')
         } 
@@ -143,7 +148,7 @@ class ProductContract extends Contract {
         }
         
         const cipherProduct = JSON.parse(productBuffer);
-        const decipherProduct = this.decrypt(cipherProduct, 'admin');
+        const decipherProduct = this.decrypt(cipherProduct, 'admin', keySize);
         const product = Product.deserializeProduct(decipherProduct);
 
         return {
@@ -152,7 +157,7 @@ class ProductContract extends Contract {
         };
     }
 
-    async readAllProducts(ctx) {
+    async readAllProducts(ctx, keySize = 768) {
         const userType = await this.getCurrentUserType(ctx);
         if (userType !== "admin")
             throw new Error(`This user does not have access to read all products.`);
@@ -171,7 +176,7 @@ class ProductContract extends Contract {
                 let Record;
                 try {
                     Record = JSON.parse(product.value.value.toString('utf8'));
-                    Record.detail = JSON.parse(this.decrypt(Record, 'admin'));
+                    Record.detail = JSON.parse(this.decrypt(Record, 'admin', keySize));
                 } catch (err) {
                     console.log(err);
                     Record = product.value.value.toString('utf8');
@@ -189,7 +194,7 @@ class ProductContract extends Contract {
         }
     }
 
-    async readProductHistory(ctx, productCode) {
+    async readProductHistory(ctx, productCode, keySize = 768) {
         if (productCode.length < 1) {
             throw new Error('productCode is required as input.');
         }
@@ -209,7 +214,7 @@ class ProductContract extends Contract {
                 
                 try {
                     jsonRes.Value = JSON.parse(history.value.value.toString('utf8'));
-                    jsonRes.Value.detail = JSON.parse(this.decrypt(jsonRes.Value, 'admin'));
+                    jsonRes.Value.detail = JSON.parse(this.decrypt(jsonRes.Value, 'admin', keySize));
                 } catch (err) {
                     console.log(err);
                     jsonRes.Value = history.value.value.toString('utf8');
@@ -234,13 +239,14 @@ class ProductContract extends Contract {
             throw new Error('This user does not have access to update a product detail.');
 
         const productDetails = JSON.parse(args);
+        const keySize = productDetails.keySize;
         const productBuffer = await ctx.stub.getState(productDetails.productCode);
         if (!productBuffer || productBuffer.length === 0) {
             throw new Error(`Error Message from updateProduct: Product with productCode = ${productDetails.productCode} does not exist.`);
         }
 
         const cipherProduct = JSON.parse(productBuffer);
-        const decipherProduct = this.decrypt(cipherProduct, 'admin');
+        const decipherProduct = this.decrypt(cipherProduct, 'admin', keySize);
         decipherProduct['txId'] = await ctx.stub.getTxID();
         
         const product = Product.deserializeProduct(decipherProduct);
@@ -263,7 +269,7 @@ class ProductContract extends Contract {
             product.setProductImageBase64(productDetails.productImageBase64);
         }
         
-        cipherProduct = this.encrypt(JSON.stringify(product), 'admin', 'product');
+        cipherProduct = this.encrypt(JSON.stringify(product), 'admin', 'product', keySize);
         await ctx.stub.putState(product.getProductCode(), Product.toBuffer(cipherProduct));
         await ctx.stub.setEvent(EVENT_NAME, Product.toBuffer(cipherProduct));
         
@@ -313,15 +319,15 @@ class ProductContract extends Contract {
         return ctx.clientIdentity.getAttributeValue("usertype");
     }
 
-    async getTokenDecimals(ctx) {
+    async getTokenDecimals(ctx, keySize = 768) {
         const tokenDecimalsBuffer = await ctx.stub.getState(tokenDecimalsKey);
         const cipherTokenDecimals = JSON.parse(tokenDecimalsBuffer.toString());
-        const decipherTokenDecimals = parseInt(this.decrypt(cipherTokenDecimals, 'admin'));
+        const decipherTokenDecimals = parseInt(this.decrypt(cipherTokenDecimals, 'admin', keySize));
         
         return decipherTokenDecimals;
     }
 
-    async getBalanceOf(ctx, userId, zeroBalance = false) {
+    async getBalanceOf(ctx, userId, zeroBalance = false, keySize = 768) {
         const balanceKey = ctx.stub.createCompositeKey(balanceKeyPrefix, [userId]);
         const balanceBuffer = await ctx.stub.getState(balanceKey);
         if (!balanceBuffer || balanceBuffer.length === 0) {
@@ -331,32 +337,32 @@ class ProductContract extends Contract {
             throw new Error(`${userId} account does not have balance.`);
         }
         const cipherBalance = JSON.parse(balanceBuffer.toString());
-        const decipherBalance = parseFloat(this.decrypt(cipherBalance, 'admin'));
+        const decipherBalance = parseFloat(this.decrypt(cipherBalance, 'admin', keySize));
 
         return decipherBalance;
     }
 
-    async getTotalSupply(ctx) {
+    async getTotalSupply(ctx, keySize = 768) {
         const tokenTotalSupplyBuffer = await ctx.stub.getState(tokenTotalSupplyKey);
         const cipherTokenSupply = JSON.parse(tokenTotalSupplyBuffer.toString());
-        const decipherTokenSupply = parseFloat(this.decrypt(cipherTokenSupply, 'admin'));
+        const decipherTokenSupply = parseFloat(this.decrypt(cipherTokenSupply, 'admin', keySize));
         
         return decipherTokenSupply;
     }
 
-    async getAllowance(ctx, owner, spender) {
+    async getAllowance(ctx, owner, spender, keySize = 768) {
         const allowanceKey = ctx.stub.createCompositeKey(allowanceKeyPrefix, [owner, spender]);
         const allowanceBuffer = await ctx.stub.getState(allowanceKey);
         if (!allowanceBuffer || allowanceBuffer.length === 0) {
             throw new Error(`Spender ${spender} has no allowance from ${owner}`);
         }
         const cipherTokenAllowance = JSON.parse(allowanceBuffer.toString());
-        const decipherTokenAllowance = parseFloat(this.decrypt(cipherTokenAllowance, 'admin'));
+        const decipherTokenAllowance = parseFloat(this.decrypt(cipherTokenAllowance, 'admin', keySize));
         
         return decipherTokenAllowance;
     }
 
-    async getAllowanceToken(ctx) {
+    async getAllowanceToken(ctx, keySize = 768) {
         const userId = await this.getCurrentUserId(ctx);
         const iterator = await ctx.stub.getStateByPartialCompositeKey(allowanceKeyPrefix, [userId]);
         let allowances = [];
@@ -370,7 +376,7 @@ class ProductContract extends Contract {
 
                 try {
                     cipherTokenAllowance = JSON.parse(allowance.value.value.toString('utf8'));
-                    decipherTokenAllowance = parseFloat(this.decrypt(cipherTokenAllowance, 'admin'));
+                    decipherTokenAllowance = parseFloat(this.decrypt(cipherTokenAllowance, 'admin', keySize));
                 } catch (err) {
                     console.log(err);
                     decipherTokenAllowance = allowance.value.value.toString('utf8');
@@ -392,7 +398,7 @@ class ProductContract extends Contract {
         }
     }
 
-    async getTokenDetails(ctx) {
+    async getTokenDetails(ctx, keySize = 768) {
         const userId = await this.getCurrentUserId(ctx);
         const tokenNameBuffer = await ctx.stub.getState(tokenNameKey);
         const tokenSymbolBuffer = await ctx.stub.getState(tokenSymbolKey);
@@ -402,9 +408,9 @@ class ProductContract extends Contract {
         const cipherTokenSymbol = JSON.parse(tokenSymbolBuffer.toString());
         const cipherTokenDecimals = JSON.parse(tokenDecimalsBuffer.toString());
 
-        const decipherTokenName = this.decrypt(cipherTokenName, 'admin');
-        const decipherTokenSymbol = this.decrypt(cipherTokenSymbol, 'admin');
-        const decipherTokenDecimals = parseInt(this.decrypt(cipherTokenDecimals, 'admin'));
+        const decipherTokenName = this.decrypt(cipherTokenName, 'admin', keySize);
+        const decipherTokenSymbol = this.decrypt(cipherTokenSymbol, 'admin', keySize);
+        const decipherTokenDecimals = parseInt(this.decrypt(cipherTokenDecimals, 'admin', keySize));
 
         const currentUserBalance = await this.getBalanceOf(ctx, userId);
         const totalSupply = await this.getTotalSupply(ctx);
@@ -427,6 +433,7 @@ class ProductContract extends Contract {
     }
 
     async transfer(ctx, sender, receiver, value, skipValueCheck = false) {
+        const keySize = 768;
         if (sender === receiver) {
             throw new Error('Cannot transfer to and from same account');
         }
@@ -449,8 +456,8 @@ class ProductContract extends Contract {
         receiverBalance += value;
         receiverBalance = parseFloat(receiverBalance.toFixed(tokenDecimals));
 
-        const cipherSenderBalance = this.encrypt(senderBalance.toString(), 'admin', 'token');
-        const cipherReceiverBalance = this.encrypt(receiverBalance.toString(), 'admin', 'token');
+        const cipherSenderBalance = this.encrypt(senderBalance.toString(), 'admin', 'token', keySize);
+        const cipherReceiverBalance = this.encrypt(receiverBalance.toString(), 'admin', 'token', keySize);
         const cipherSenderBalanceKey = ctx.stub.createCompositeKey(balanceKeyPrefix, [sender]);
         const cipherReceiverBalanceKey = ctx.stub.createCompositeKey(balanceKeyPrefix, [receiver]);
         
@@ -480,6 +487,7 @@ class ProductContract extends Contract {
     }
 
     async transferFromToken(ctx, args){
+        const keySize = 768;
         const userId = await this.getCurrentUserId(ctx);
         const transferFromDetails = JSON.parse(args);
         let allowanceBalance = await this.getAllowance(ctx, transferFromDetails.owner, userId);
@@ -499,7 +507,7 @@ class ProductContract extends Contract {
 
         allowanceBalance -=  transferFromDetails.value;
         allowanceBalance = parseFloat(allowanceBalance.toFixed(tokenDecimals));
-        const cipherAllowanceBalance = this.encrypt(allowanceBalance.toString(), 'admin', 'token');
+        const cipherAllowanceBalance = this.encrypt(allowanceBalance.toString(), 'admin', 'token', keySize);
         const allowanceKey = ctx.stub.createCompositeKey(allowanceKeyPrefix, [transferFromDetails.owner, userId]);
         await ctx.stub.putState(allowanceKey, Buffer.from(JSON.stringify(cipherAllowanceBalance)));
         await ctx.stub.setEvent(EVENT_NAME, Buffer.from(JSON.stringify(cipherAllowanceBalance)));
@@ -514,6 +522,7 @@ class ProductContract extends Contract {
     }
 
     async approveToken(ctx, args){
+        const keySize = 768;
         const userId = await this.getCurrentUserId(ctx);
         const approveDetails = JSON.parse(args);
         if (userId === approveDetails.spender) {
@@ -530,7 +539,7 @@ class ProductContract extends Contract {
         }
 
         const allowanceKey = ctx.stub.createCompositeKey(allowanceKeyPrefix, [userId, approveDetails.spender]);
-        const cipherAllowance = this.encrypt(approveDetails.value.toString(), 'admin', 'token');
+        const cipherAllowance = this.encrypt(approveDetails.value.toString(), 'admin', 'token', keySize);
         await ctx.stub.putState(allowanceKey, Buffer.from(JSON.stringify(cipherAllowance)));
         await ctx.stub.setEvent(EVENT_NAME, Buffer.from(JSON.stringify(cipherAllowance)));
 
@@ -543,6 +552,7 @@ class ProductContract extends Contract {
     }
 
     async mintToken(ctx, args){
+        const keySize = 768;
         const userId = await this.getCurrentUserId(ctx);
         const userType = await this.getCurrentUserType(ctx);
         if (userType !== "admin")
@@ -556,14 +566,14 @@ class ProductContract extends Contract {
 
         let minterBalance = await this.getBalanceOf(ctx, userId, true);
         minterBalance += mintDetails.value;
-        const cipherMinterBalance = this.encrypt(minterBalance.toString(), 'admin', 'token');
+        const cipherMinterBalance = this.encrypt(minterBalance.toString(), 'admin', 'token', keySize);
         const minterBalanceKey = ctx.stub.createCompositeKey(balanceKeyPrefix, [userId]);
         await ctx.stub.putState(minterBalanceKey, Buffer.from(JSON.stringify(cipherMinterBalance)));
         await ctx.stub.setEvent(EVENT_NAME, Buffer.from(JSON.stringify(cipherMinterBalance)));
 
         let tokenTotalSupply = await this.getTotalSupply(ctx);
         tokenTotalSupply += mintDetails.value;
-        const cipherTokenTotalSupply = this.encrypt(tokenTotalSupply.toString(), 'admin', 'token');
+        const cipherTokenTotalSupply = this.encrypt(tokenTotalSupply.toString(), 'admin', 'token', keySize);
         await ctx.stub.putState(tokenTotalSupplyKey, Buffer.from(JSON.stringify(cipherTokenTotalSupply)));
         await ctx.stub.setEvent(EVENT_NAME, Buffer.from(cipherTokenTotalSupply.toString()));
 

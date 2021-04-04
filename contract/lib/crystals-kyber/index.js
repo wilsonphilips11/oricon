@@ -1,16 +1,21 @@
-const {KeyGen768, Encrypt768, Decrypt768} = require("./kyber768");
+const {KeyGen, Encrypt, Decrypt, changeParams} = require("./kyber768");
 
-exports.K768_KeyGen = () => {
-    var pk_sk = KeyGen768();
+exports.Kyber_KeyGen = (newParams) => {
+    changeParams(newParams);
+    var pk_sk = KeyGen();
     return pk_sk;
 }
 
-exports.K768_Encrypt = (pk) => {
-    var c_ss = Encrypt768(pk);
+exports.Kyber_Encrypt = (pk, newParams) => {
+    changeParams(newParams);
+
+    var c_ss = Encrypt(pk);
     return c_ss;
 }
 
-exports.K768_Decrypt = (c,sk) => {
-    var ss = Decrypt768(c,sk);
+exports.Kyber_Decrypt = (c,sk, newParams) => {
+    changeParams(newParams);
+    
+    var ss = Decrypt(c,sk);
     return ss;
 }
