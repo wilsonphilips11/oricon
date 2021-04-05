@@ -396,7 +396,7 @@ utils.getUser = async (userid, adminIdentity) => {
     }
     console.log (result);
     return Promise.resolve({
-        status: 'Successfully get current user logged in!',
+        status: 'Successfully get user details!',
         result: result
     });
 }

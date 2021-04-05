@@ -99,7 +99,7 @@ productAuthenticationRouter.route('/products/:productCode').get(function (reques
         });
 });
 
-productAuthenticationRouter.route('/queryTransaction/:transactionId').get(function (request, response) {
+productAuthenticationRouter.route('/query-transaction/:transactionId').get(function (request, response) {
     getUsernamePassword(request)
         .then(request => {
             utils.queryTransactionByID(request.params.transactionId).then((result) => {

@@ -116,7 +116,7 @@ class ProductContract extends Contract {
         }
 
         const productDetails = JSON.parse(args);
-        productDetails['txId'] = await ctx.stub.getTxID();
+        productDetails['productTxId'] = await ctx.stub.getTxID();
         const productBuffer = await ctx.stub.getState(productDetails.productCode);
         if (productBuffer && productBuffer.length > 0) {
             throw new Error(`Error Message from createProduct. Product with productCode = ${productDetails.productCode} already exists.`);
@@ -239,11 +239,10 @@ class ProductContract extends Contract {
             throw new Error(`Error Message from updateProduct: Product with productCode = ${productDetails.productCode} does not exist.`);
         }
 
-        const cipherProduct = JSON.parse(productBuffer);
+        let cipherProduct = JSON.parse(productBuffer);
         const decipherProduct = this.decrypt(cipherProduct, 'admin');
-        decipherProduct['txId'] = await ctx.stub.getTxID();
-        
         const product = Product.deserializeProduct(decipherProduct);
+
         if (product.getProductName() !== productDetails.productName) {
             product.setProductName(productDetails.productName);
         }
@@ -263,6 +262,7 @@ class ProductContract extends Contract {
             product.setProductImageBase64(productDetails.productImageBase64);
         }
         
+        product.productTxId = await ctx.stub.getTxID();
         cipherProduct = this.encrypt(JSON.stringify(product), 'admin', 'product');
         await ctx.stub.putState(product.getProductCode(), Product.toBuffer(cipherProduct));
         await ctx.stub.setEvent(EVENT_NAME, Product.toBuffer(cipherProduct));
@@ -330,7 +330,7 @@ class ProductContract extends Contract {
             }
             throw new Error(`${userId} account does not have balance.`);
         }
-        const cipherBalance = JSON.parse(balanceBuffer.toString());
+        const cipherBalance = JSON.parse(balanceBuffer);
         const decipherBalance = parseFloat(this.decrypt(cipherBalance, 'admin'));
 
         return decipherBalance;
@@ -338,7 +338,7 @@ class ProductContract extends Contract {
 
     async getTotalSupply(ctx) {
         const tokenTotalSupplyBuffer = await ctx.stub.getState(tokenTotalSupplyKey);
-        const cipherTokenSupply = JSON.parse(tokenTotalSupplyBuffer.toString());
+        const cipherTokenSupply = JSON.parse(tokenTotalSupplyBuffer);
         const decipherTokenSupply = parseFloat(this.decrypt(cipherTokenSupply, 'admin'));
         
         return decipherTokenSupply;
@@ -350,7 +350,7 @@ class ProductContract extends Contract {
         if (!allowanceBuffer || allowanceBuffer.length === 0) {
             throw new Error(`Spender ${spender} has no allowance from ${owner}`);
         }
-        const cipherTokenAllowance = JSON.parse(allowanceBuffer.toString());
+        const cipherTokenAllowance = JSON.parse(allowanceBuffer);
         const decipherTokenAllowance = parseFloat(this.decrypt(cipherTokenAllowance, 'admin'));
         
         return decipherTokenAllowance;
@@ -398,15 +398,20 @@ class ProductContract extends Contract {
         const tokenSymbolBuffer = await ctx.stub.getState(tokenSymbolKey);
         const tokenDecimalsBuffer = await ctx.stub.getState(tokenDecimalsKey);
 
-        const cipherTokenName = JSON.parse(tokenNameBuffer.toString());
-        const cipherTokenSymbol = JSON.parse(tokenSymbolBuffer.toString());
-        const cipherTokenDecimals = JSON.parse(tokenDecimalsBuffer.toString());
+        const cipherTokenName = JSON.parse(tokenNameBuffer);
+        const cipherTokenSymbol = JSON.parse(tokenSymbolBuffer);
+        const cipherTokenDecimals = JSON.parse(tokenDecimalsBuffer);
 
         const decipherTokenName = this.decrypt(cipherTokenName, 'admin');
         const decipherTokenSymbol = this.decrypt(cipherTokenSymbol, 'admin');
         const decipherTokenDecimals = parseInt(this.decrypt(cipherTokenDecimals, 'admin'));
 
-        const currentUserBalance = await this.getBalanceOf(ctx, userId);
+        let currentUserBalance;
+        try {
+            currentUserBalance = await this.getBalanceOf(ctx, userId);
+        } catch(err) {
+            currentUserBalance = 'No balance';
+        }
         const totalSupply = await this.getTotalSupply(ctx);
 
         const response = {

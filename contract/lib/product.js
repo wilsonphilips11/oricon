@@ -2,8 +2,8 @@
 
 class Product {
 
-    constructor(txId, productCode, productName, productPrice, productOrigin, productReleaseDate, productDescription, productImageBase64) {
-        this.productTxId = txId;
+    constructor(productTxId, productCode, productName, productPrice, productOrigin, productReleaseDate, productDescription, productImageBase64) {
+        this.productTxId = productTxId;
         this.productCode = productCode;
         this.productName = productName;
         this.productPrice = productPrice;
@@ -74,9 +74,9 @@ class Product {
     }
 
     static deserializeProduct(productData) {
-        const productDetails = JSON.parse(productData.toString());
+        const productDetails = JSON.parse(productData);
         const product = new Product(
-            productDetails.txId,
+            productDetails.productTxId,
             productDetails.productCode,
             productDetails.productName,  
             productDetails.productPrice,
