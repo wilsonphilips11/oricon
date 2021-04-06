@@ -73,7 +73,7 @@ async function evalTx(request, txName, ...args) {
     }
 }
 
-productAuthenticationRouter.route('/create-product/').post(function (request, response) {
+productAuthenticationRouter.route('/create-product').post(function (request, response) {
     submitTx(request, 'createProduct', JSON.stringify(request.body))
         .then((result) => {
             console.log('\nProcess createProduct transaction.');
@@ -86,8 +86,8 @@ productAuthenticationRouter.route('/create-product/').post(function (request, re
         });
 });
 
-productAuthenticationRouter.route('/products/:productCode').get(function (request, response) {
-    evalTx(request, 'readProduct', request.params.productCode)
+productAuthenticationRouter.route('/products/:productCode/:keySize').get(function (request, response) {
+    evalTx(request, 'readProduct', request.params.productCode, request.params.keySize)
         .then((result) => {
             console.log('\nProcess readProduct transaction.');
             response.status(STATUS_SUCCESS);
@@ -117,8 +117,8 @@ productAuthenticationRouter.route('/query-transaction/:transactionId').get(funct
         }));
 });
 
-productAuthenticationRouter.route('/products').get(function (request, response) {
-    evalTx(request, 'readAllProducts', '')
+productAuthenticationRouter.route('/products/:keySize').get(function (request, response) {
+    evalTx(request, 'readAllProducts', request.params.keySize)
         .then((result) => {
             console.log('\nProcess readAllProducts transaction.');
             response.status(STATUS_SUCCESS);

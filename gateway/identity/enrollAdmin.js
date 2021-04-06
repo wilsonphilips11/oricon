@@ -13,8 +13,7 @@ const ccpPath = path.resolve(__dirname, '..', 'connection-org1.json');
 const ccpJSON = fs.readFileSync(ccpPath, 'utf8');
 const ccp = JSON.parse(ccpJSON);
 
-// Crypto Modules
-const {K768_KeyGen} = require('../../contract/lib/crystals-kyber');
+const {Kyber_KeyGen} = require('../../contract/lib/crystals-kyber');
 
 async function main() {
     try {
@@ -43,22 +42,27 @@ async function main() {
         await wallet.import('admin', identity);
         console.log('Successfully enrolled admin user "admin" and imported it into the wallet');
         
-        const pk_sk = K768_KeyGen();
-        const pk = pk_sk[0].toString();
-        const sk = pk_sk[1].toString();
         fs.mkdirSync(`${walletContractPath}/admin`, {
             recursive: true,
             mode: 0o77
         });
-        fs.appendFile(`${walletContractPath}/admin/pk-K768.txt`, pk, function (err) {
-            if (err) throw err;
-            console.log('Saved admin K768 public key into the wallet!');
-        });
-        fs.appendFile(`${walletContractPath}/admin/sk-K768.txt`, sk, function (err) {
-            if (err) throw err;
-            console.log('Saved admin K768 private key into the wallet!');
-        });
 
+        const keySize = [512, 768, 1024];
+
+        for(let iterator = 0; iterator < keySize.length; iterator++) {
+            let pk_sk = Kyber_KeyGen(keySize[iterator]);
+            let pk = pk_sk[0].toString();
+            let sk = pk_sk[1].toString();
+    
+            fs.appendFile(`${walletContractPath}/admin/pk-K${keySize[iterator]}.txt`, pk, function (err) {
+                if (err) throw err;
+                console.log('Saved admin K', keySize[iterator],' public key into the wallet!');
+            });
+            fs.appendFile(`${walletContractPath}/admin/sk-K${keySize[iterator]}.txt`, sk, function (err) {
+                if (err) throw err;
+                console.log('Saved admin K', keySize[iterator], 'private key into the wallet!');
+            });
+        }
     } catch (error) {
         console.error(`Failed to enroll admin user "admin": ${error}`);
         process.exit(1);
