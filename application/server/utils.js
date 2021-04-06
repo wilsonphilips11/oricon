@@ -7,7 +7,7 @@ const { FileSystemWallet, Gateway, X509WalletMixin } = require('fabric-network')
 const FabricCAServices = require('fabric-ca-client');
 
 // Crypto Modules
-const {K768_Decrypt} = require('../../contract/lib/crystals-kyber/index.js');
+const {Kyber_Decrypt} = require('../../contract/lib/crystals-kyber/index.js');
 const Crypto = require('crypto');
 
 //  global variables for HLFabric
@@ -216,8 +216,9 @@ utils.queryTransactionByID = async (trId) => {
         const writeSetValue = JSON.parse(writeSet.value);
         const productDetails = writeSetValue.detail;
         const cipherKey = writeSetValue.cipherKey;
+        const keySize = writeSetValue.keySize;
 
-        const userWallet = require.resolve(`../../contract/lib/wallet/admin/sk-K768.txt`);
+        const userWallet = require.resolve(`../../contract/lib/wallet/admin/sk-K${keySize}.txt`);
         let secretKey;
         try {
             secretKey = fs.readFileSync(`${userWallet}`, 'utf8');
@@ -226,7 +227,7 @@ utils.queryTransactionByID = async (trId) => {
             console.error('Error: ', err);
         }
         
-        const symKey = K768_Decrypt(cipherKey, secretKey);
+        const symKey = Kyber_Decrypt(cipherKey, secretKey, keySize);
         const symBuffer = Buffer.from(symKey);
         const decipher = Crypto.createDecipher('aes256', symBuffer);    
         let decrypted = decipher.update(productDetails, 'hex', 'utf8');

@@ -99,6 +99,32 @@ productAuthenticationRouter.route('/products/:productCode/:keySize').get(functio
         });
 });
 
+productAuthenticationRouter.route('/products/:keySize').get(function (request, response) {
+    evalTx(request, 'readAllProducts', request.params.keySize)
+        .then((result) => {
+            console.log('\nProcess readAllProducts transaction.');
+            response.status(STATUS_SUCCESS);
+            response.send(result);
+        }, (error) => {
+            response.status(STATUS_SERVER_ERROR);
+            response.send(utils.prepareErrorResponse(error, STATUS_SERVER_ERROR,
+                "There was a problem getting the list of products."));
+        });
+});
+
+productAuthenticationRouter.route('/product-history/:productCode/:keySize').get(function (request, response) {
+    evalTx(request, 'readProductHistory', request.params.productCode, request.params.keySize)
+        .then((result) => {
+            console.log('\nProcess productHistory transaction.');
+            response.status(STATUS_SUCCESS);
+            response.send(result);
+        }, (error) => {
+            response.status(STATUS_SERVER_ERROR);
+            response.send(utils.prepareErrorResponse(error, STATUS_SERVER_ERROR,
+                "There was a problem fetching history for product, ", request.params.productCode));
+        });
+});
+
 productAuthenticationRouter.route('/query-transaction/:transactionId').get(function (request, response) {
     getUsernamePassword(request)
         .then(request => {
@@ -115,32 +141,6 @@ productAuthenticationRouter.route('/query-transaction/:transactionId').get(funct
             response.send(utils.prepareErrorResponse(error, INVALID_HEADER,
                 "Invalid header;  User, " + request.username + " could not be enrolled."));
         }));
-});
-
-productAuthenticationRouter.route('/products/:keySize').get(function (request, response) {
-    evalTx(request, 'readAllProducts', request.params.keySize)
-        .then((result) => {
-            console.log('\nProcess readAllProducts transaction.');
-            response.status(STATUS_SUCCESS);
-            response.send(result);
-        }, (error) => {
-            response.status(STATUS_SERVER_ERROR);
-            response.send(utils.prepareErrorResponse(error, STATUS_SERVER_ERROR,
-                "There was a problem getting the list of products."));
-        });
-});
-
-productAuthenticationRouter.route('/product-history/:productCode').get(function (request, response) {
-    evalTx(request, 'readProductHistory', request.params.productCode)
-        .then((result) => {
-            console.log('\nProcess productHistory transaction.');
-            response.status(STATUS_SUCCESS);
-            response.send(result);
-        }, (error) => {
-            response.status(STATUS_SERVER_ERROR);
-            response.send(utils.prepareErrorResponse(error, STATUS_SERVER_ERROR,
-                "There was a problem fetching history for product, ", request.params.productCode));
-        });
 });
 
 productAuthenticationRouter.route('/update-product').put(function (request, response) {
