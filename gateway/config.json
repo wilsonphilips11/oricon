@@ -1,5 +1,8 @@
 {
-    "wallet":"../../gateway/identity/wallet",
+    "wallet": {
+        "url": "http://admin:password@0.0.0.0:7984",
+        "name": "couchdb-wallet"
+    },
     "connection_profile_filename":"../../gateway/connection-org1.json",
     "channel_name":"mychannel",
     "smart_contract_name":"product-contract",

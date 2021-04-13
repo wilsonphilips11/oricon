@@ -3,7 +3,7 @@
 // Bring key classes into scope, most importantly Fabric SDK network class
 const fs = require('fs');
 const path = require('path');
-const { FileSystemWallet, Gateway, X509WalletMixin } = require('fabric-network');
+const { CouchDBWallet, Gateway, X509WalletMixin } = require('fabric-network');
 const FabricCAServices = require('fabric-ca-client');
 
 // Crypto Modules
@@ -83,7 +83,7 @@ utils.connectGatewayFromConfig = async () => {
         console.log('MSP ID: ' + orgMSPID);
 
         // Open path to the identity wallet
-        wallet = new FileSystemWallet(walletpath);
+        wallet = new CouchDBWallet(walletpath);
 
         const idExists = await wallet.exists(userid);
         if (!idExists) {

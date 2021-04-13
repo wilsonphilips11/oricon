@@ -104,6 +104,16 @@ services:
       - "6984:5984"
     networks:
       - byfn
+  couchdb-wallet:
+    container_name: couchdb-wallet
+    image: hyperledger/fabric-couchdb
+    environment:
+      - COUCHDB_USER=admin
+      - COUCHDB_PASSWORD=password
+    ports:
+      - "7984:5984"
+    networks:
+      - byfn
 
   peer1.org1.example.com:
     container_name: peer1.org1.example.com
@@ -164,6 +174,25 @@ services:
     ports:
       - 8051:8051
   
+  ca1:
+    image: hyperledger/fabric-ca:$IMAGE_TAG
+    extends:
+      file: base.yaml
+      service: ca-base
+    environment:
+      - FABRIC_CA_SERVER_CA_NAME=ca-org1
+      - FABRIC_CA_SERVER_TLS_CERTFILE=/etc/hyperledger/fabric-ca-server-config/ca.org1.example.com-cert.pem
+      - FABRIC_CA_SERVER_TLS_KEYFILE=/etc/hyperledger/fabric-ca-server-config/b37b56b2690024d753e1e7d93b8ea1376a9cb505adf81c5506e95b0187424e72_sk
+      - FABRIC_CA_SERVER_PORT=7054
+    ports:
+      - "7054:7054"
+    command: sh -c 'fabric-ca-server start --ca.certfile /etc/hyperledger/fabric-ca-server-config/ca.org1.example.com-cert.pem --ca.keyfile /etc/hyperledger/fabric-ca-server-config/b37b56b2690024d753e1e7d93b8ea1376a9cb505adf81c5506e95b0187424e72_sk -b admin:adminpw -d'
+    volumes:
+      - ./crypto-config/peerOrganizations/org1.example.com/ca/:/etc/hyperledger/fabric-ca-server-config
+    container_name: ca_peerOrg1
+    networks:
+      - byfn
+
   cli:
     container_name: cli
     image: hyperledger/fabric-tools:$IMAGE_TAG
@@ -199,25 +228,8 @@ services:
       - orderer5.example.com
       - peer1.org1.example.com
       - peer2.org1.example.com
-    networks:
-      - byfn
-  
-  ca1:
-    image: hyperledger/fabric-ca:$IMAGE_TAG
-    extends:
-      file: base.yaml
-      service: ca-base
-    environment:
-      - FABRIC_CA_SERVER_CA_NAME=ca-org1
-      - FABRIC_CA_SERVER_TLS_CERTFILE=/etc/hyperledger/fabric-ca-server-config/ca.org1.example.com-cert.pem
-      - FABRIC_CA_SERVER_TLS_KEYFILE=/etc/hyperledger/fabric-ca-server-config/b37b56b2690024d753e1e7d93b8ea1376a9cb505adf81c5506e95b0187424e72_sk
-      - FABRIC_CA_SERVER_PORT=7054
-    ports:
-      - "7054:7054"
-    command: sh -c 'fabric-ca-server start --ca.certfile /etc/hyperledger/fabric-ca-server-config/ca.org1.example.com-cert.pem --ca.keyfile /etc/hyperledger/fabric-ca-server-config/b37b56b2690024d753e1e7d93b8ea1376a9cb505adf81c5506e95b0187424e72_sk -b admin:adminpw -d'
-    volumes:
-      - ./crypto-config/peerOrganizations/org1.example.com/ca/:/etc/hyperledger/fabric-ca-server-config
-    container_name: ca_peerOrg1
+      - ca1
+      - couchdb-wallet
     networks:
       - byfn
 
