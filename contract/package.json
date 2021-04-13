@@ -19,7 +19,8 @@
   "dependencies": {
     "crystals-kyber": "^2.0.2",
     "fabric-contract-api": "1.4.0",
-    "fabric-shim": "1.4.0"
+    "fabric-shim": "1.4.0",
+    "firebase": "^8.4.1"
   },
   "devDependencies": {
     "chai": "^4.2.0",

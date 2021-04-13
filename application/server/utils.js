@@ -10,6 +10,10 @@ const FabricCAServices = require('fabric-ca-client');
 const {Kyber_Decrypt} = require('../../contract/lib/crystals-kyber/index.js');
 const Crypto = require('crypto');
 
+// Kyber Wallet
+const fire = require('../../gateway/identity/fire');
+const db = fire.firestore();
+
 //  global variables for HLFabric
 var gateway;
 var network;
@@ -200,7 +204,7 @@ utils.queryTransactionByID = async (trId) => {
     const peers = channel.getChannelPeers();
 
     let response_payload = channel.queryTransaction(trId, peers[0].getName());
-    return response_payload.then(response => {
+    return response_payload.then(async response => {
         const writeSet = response.transactionEnvelope
                             .payload
                             .data
@@ -218,16 +222,13 @@ utils.queryTransactionByID = async (trId) => {
         const cipherKey = writeSetValue.cipherKey;
         const keySize = writeSetValue.keySize;
 
-        const userWallet = require.resolve(`../../contract/lib/wallet/admin/sk-K${keySize}.txt`);
-        let secretKey;
-        try {
-            secretKey = fs.readFileSync(`${userWallet}`, 'utf8');
-            secretKey = secretKey.split(",").map(Number);
-          } catch (err) {
-            console.error('Error: ', err);
+        const secretKeyRef = db.collection('kyber-key').doc(`sk-K${keySize}`);
+        const secretKeyDoc = await secretKeyRef.get();
+        if (!secretKeyDoc.exists) {
+            throw new Error(`sk-K${keySize} not found!`);
         }
         
-        const symKey = Kyber_Decrypt(cipherKey, secretKey, keySize);
+        const symKey = Kyber_Decrypt(cipherKey, secretKeyDoc.data().sk, keySize);
         const symBuffer = Buffer.from(symKey);
         const decipher = Crypto.createDecipher('aes256', symBuffer);    
         let decrypted = decipher.update(productDetails, 'hex', 'utf8');
