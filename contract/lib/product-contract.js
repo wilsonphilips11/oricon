@@ -27,6 +27,9 @@ const tokenTotalSupply = 0;
 const fire = require('./fire');
 const db = fire.firestore();
 
+// Transaction Fee
+const txFee = 100;
+
 class ProductContext extends Context {
     
     constructor() {
@@ -110,6 +113,12 @@ class ProductContract extends Contract {
         const userType = await this.getCurrentUserType(ctx);
         if (userType !== "admin") {
             throw new Error('This user does not have access to create an product');
+        } else {
+            const userId = await this.getCurrentUserId(ctx);
+            const transferRes = await this.transfer(ctx, userId, 'Admin@org1.example.com', txFee);
+            if (!transferRes) {
+                throw new Error('Failed to transfer');
+            }
         }
 
         const productDetails = JSON.parse(args);
@@ -132,6 +141,10 @@ class ProductContract extends Contract {
     }
 
     async readProduct(ctx, productCode, keySize) {
+        const userType = await this.getCurrentUserType(ctx);
+        if (userType !== "admin")
+            throw new Error(`This user does not have access to read a product.`);
+
         if (productCode.length < 1) {
             throw new Error('productCode is required as input')
         } 
@@ -188,6 +201,10 @@ class ProductContract extends Contract {
     }
 
     async readProductHistory(ctx, productCode, keySize) {
+        const userType = await this.getCurrentUserType(ctx);
+        if (userType !== "admin")
+            throw new Error(`This user does not have access to read all products.`);
+
         if (productCode.length < 1) {
             throw new Error('productCode is required as input.');
         }
@@ -228,8 +245,15 @@ class ProductContract extends Contract {
 
     async updateProduct(ctx, args) {
         const userType = await this.getCurrentUserType(ctx);
-        if (userType !== "admin")
+        if (userType !== "admin") {
             throw new Error('This user does not have access to update a product detail.');
+        } else {
+            const userId = await this.getCurrentUserId(ctx);
+            const transferRes = await this.transfer(ctx, userId, 'Admin@org1.example.com', txFee);
+            if (!transferRes) {
+                throw new Error('Failed to transfer');
+            }
+        }
 
         const productDetails = JSON.parse(args);
         const keySize = productDetails.keySize;
@@ -274,8 +298,15 @@ class ProductContract extends Contract {
 
     async deleteProduct(ctx, productCode) {
         const userType = await this.getCurrentUserType(ctx);
-        if (userType !== "admin")
+        if (userType !== "admin") {
             throw new Error('This user ddoes not have access to delete a product.');
+        } else {
+            const userId = await this.getCurrentUserId(ctx);
+            const transferRes = await this.transfer(ctx, userId, 'Admin@org1.example.com', txFee);
+            if (!transferRes) {
+                throw new Error('Failed to transfer');
+            }
+        }
 
         if (productCode.length < 1) {
             throw new Error('productCode required as input');
@@ -548,9 +579,9 @@ class ProductContract extends Contract {
 
     async mintToken(ctx, args){
         const userId = await this.getCurrentUserId(ctx);
-        const userType = await this.getCurrentUserType(ctx);
-        if (userType !== "admin")
+        if (userId !== "Admin@org1.example.com")
             throw new Error('This user does not have access to mint tokens.');
+        
         const mintDetails = JSON.parse(args);
         if (typeof(mintDetails.value) !== 'number' || mintDetails.value <= 0) {
             throw new Error('Mint amount must be positive number!');

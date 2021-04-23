@@ -3,7 +3,7 @@
 // Bring key classes into scope, most importantly Fabric SDK network class
 const fs = require('fs');
 const path = require('path');
-const { CouchDBWallet, Gateway, X509WalletMixin } = require('fabric-network');
+const { CouchDBWallet, Gateway, X509WalletMixin, FileSystemWallet } = require('fabric-network');
 const FabricCAServices = require('fabric-ca-client');
 
 // Crypto Modules
@@ -13,6 +13,11 @@ const Crypto = require('crypto');
 // Kyber Wallet
 const fire = require('../../gateway/identity/fire');
 const db = fire.firestore();
+
+// CouchDB User
+const nano = require('nano')('http://admin:password@0.0.0.0:7984');
+const dbname = 'user-credential';
+const userCredentialDB = nano.use(dbname);
 
 //  global variables for HLFabric
 var gateway;
@@ -64,8 +69,7 @@ utils.connectGatewayFromConfig = async () => {
         console.log("Platform = " + platform);
         bLocalHost = true;
 
-        const walletpath = configdata["wallet"];
-        console.log("walletpath = " + walletpath);
+        console.log("walletpath = " + configdata["wallet"]);
 
         // Parse the connection profile. This would be the path to the file downloaded
         // from the IBM Blockchain Platform operational console.
@@ -83,7 +87,7 @@ utils.connectGatewayFromConfig = async () => {
         console.log('MSP ID: ' + orgMSPID);
 
         // Open path to the identity wallet
-        wallet = new CouchDBWallet(walletpath);
+        wallet = new CouchDBWallet(configdata["wallet"]);
 
         const idExists = await wallet.exists(userid);
         if (!idExists) {
@@ -264,17 +268,21 @@ utils.registerUser = async (userid, userpwd, usertype, adminIdentity) => {
     var newUserDetails = {
         enrollmentID: userid,
         enrollmentSecret: userpwd,
-        role: "client",
-        //affiliation: orgMSPID,
-        //profile: 'tls',
+        affiliation: 'org1',
         attrs: [
             {
                 "name": "usertype",
                 "value": usertype,
                 "ecert": true
             }],
-        maxEnrollments: 5
+        maxEnrollments: 1
     };
+
+    try {
+        await userCredentialDB.insert({enrollmentSecret: userpwd}, userid);
+    } catch (error) {
+        throw new Error('Failed insert user credential into couchdb');
+    }
 
     //  Register is done using admin signing authority
     return ca.register(newUserDetails, gateway.getCurrentIdentity())
@@ -311,6 +319,7 @@ utils.enrollUser = async (userid, userpwd, usertype) => {
     var newUserDetails = {
         enrollmentID: userid,
         enrollmentSecret: userpwd,
+        profile: 'tls',
         attrs: [
             {
                 "name": "usertype", // application role
@@ -322,7 +331,7 @@ utils.enrollUser = async (userid, userpwd, usertype) => {
     return ca.enroll(newUserDetails).then(enrollment => {
         //console.log("\n Successful enrollment; Data returned by enroll", enrollment.certificate);
         var identity = X509WalletMixin.createIdentity(orgs[orgMSPID].mspid, enrollment.certificate, enrollment.key.toBytes());
-        return wallet.import(userid, identity).then(notused => {
+        return wallet.import(userid, identity).then(notused => {            
             return {
                 status: 'Successfully enroll user and import into the wallet!'
             };
@@ -342,6 +351,12 @@ utils.setUserContext = async (userid, pwd) => {
     // It is possible that the user has been registered and enrolled in Fabric CA earlier
     // and the certificates (in the wallet) could have been removed.
     // Note that this case is not handled here.
+
+    if (userid === 'Admin@org1.example.com') {
+        wallet = new FileSystemWallet(configdata["rootAdminWallet"]);
+    } else {
+        wallet = new CouchDBWallet(configdata["wallet"]);
+    }
 
     // Verify if user is already enrolled
     const userExists = await wallet.exists(userid);
@@ -447,6 +462,18 @@ utils.getAllUsers = async (adminIdentity) => {
 utils.getRandomNum = () => {
     const s4 = () => Math.floor((1 + Math.random()) * 0x10000).toString(16).substring(1)
     return `${s4()}${s4()}${s4()}${s4()}`
+}
+
+utils.checkUserCredential = async (username, password) => {
+    try {
+        const credentialDoc = await userCredentialDB.get(username);
+        if (credentialDoc.enrollmentSecret !== password) {
+            return false;
+        }
+        return true;
+    } catch (error) {
+        throw new Error('Failed getting user credential from couchdb');
+    }
 }
 
 module.exports = utils;

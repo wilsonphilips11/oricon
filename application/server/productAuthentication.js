@@ -21,10 +21,21 @@ async function getUsernamePassword(request) {
     const credentials = Buffer.from(base64Credentials, 'base64').toString('ascii');
     const [username, password] = credentials.split(':');
 
-    if (!username || !password) {
-        return new Promise().reject('Invalid Authentication Credentials');
+    if (username === 'Admin@org1.example.com') {
+        request.username = username;
+        return request;
     }
 
+    if (!username || !password) {
+        return new Promise().reject('Incomplete Authentication Credentials');
+    }
+    
+    try {
+        await utils.checkUserCredential(username, password);
+    } catch (error) {
+        return new Promise().reject('Invalid Authentication Credentials');
+    }
+    
     request.username = username;
     request.password = password;
 

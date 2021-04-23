@@ -19,6 +19,7 @@
     "http-errors": "~1.6.2",
     "ibm-cloud-env": "^0.2.6",
     "log4js": "^6.3.0",
+    "nano": "^9.0.3",
     "passport": "^0.4.0",
     "yamljs": "^0.3.0"
   },
