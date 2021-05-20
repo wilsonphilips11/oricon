@@ -28,7 +28,7 @@ const fire = require('./fire');
 const db = fire.firestore();
 
 // Transaction Fee
-const txFee = 100;
+const txFee = 1;
 
 class ProductContext extends Context {
     
