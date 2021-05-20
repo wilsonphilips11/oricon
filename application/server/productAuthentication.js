@@ -290,16 +290,15 @@ productAuthenticationRouter.route('/register-user').post(function (request, resp
 });
 
 productAuthenticationRouter.route('/enroll-user/').post(function (request, response) {
-    let userType = request.body.usertype;
     //  retrieve username, password of the called from authorization header
     getUsernamePassword(request).then(request => {
-        utils.enrollUser(request.username, request.password, userType).then(result => {
+        utils.enrollUser(request.username, request.password).then(result => {
             response.status(STATUS_SUCCESS);
             response.send(result);
         }, error => {
             response.status(STATUS_CLIENT_ERROR);
             response.send(utils.prepareErrorResponse(error, STATUS_CLIENT_ERROR,
-                "User, " + request.username + " could not be enrolled. Check that user is registered."));
+                "User, " + request.username + " could not be enrolled. Check that user is registered or user has been enrolled."));
         });
     }), (error => {
         response.status(STATUS_CLIENT_ERROR);
