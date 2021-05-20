@@ -11,6 +11,7 @@ class Product {
         this.productReleaseDate = productReleaseDate;
         this.productDescription = productDescription;
         this.productImageBase64 = productImageBase64;
+        this.objectType = 'product';
     }
     
     setProductName(productName) {
