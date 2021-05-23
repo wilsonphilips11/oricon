@@ -19,7 +19,7 @@ const tokenDecimals = 3;
 const tokenTotalSupply = 0;
 
 // Transaction Fee
-const txFee = 100;
+const txFee = 1;
 
 class ProductContext extends Context {
     
@@ -265,6 +265,8 @@ class ProductContract extends Contract {
         const userid = await this.getCurrentUserId(ctx);
         if (userid === "admin") {
             return userid;
+        } else if (userid.includes("@org1.example.com")) {
+            return 'admin';
         }
         
         return ctx.clientIdentity.getAttributeValue("usertype");
