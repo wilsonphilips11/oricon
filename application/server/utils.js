@@ -32,6 +32,8 @@ const EVENT_TYPE = "productContractEvent";  //  HLFabric EVENT
 const SUCCESS = 0;
 const utils = {};
 
+const { PerformanceObserver, performance } = require('perf_hooks');
+
 utils.prepareErrorResponse = (error, code, message) => {
     let errorMsg;
     try {
@@ -207,6 +209,7 @@ utils.queryTransactionByID = async (trId) => {
     const channel = client.getChannel(configdata["channel_name"]);
     const peers = channel.getChannelPeers();
 
+    // const beginTime  = performance.now();
     let response_payload = channel.queryTransaction(trId, peers[0].getName());
     return response_payload.then(async response => {
         const writeSet = response.transactionEnvelope
@@ -220,7 +223,7 @@ utils.queryTransactionByID = async (trId) => {
                             .results
                             .ns_rwset[1]
                             .rwset
-                            .writes[0];
+                            .writes[2];
         const writeSetValue = JSON.parse(writeSet.value);
         const productDetails = writeSetValue.detail;
         const cipherKey = writeSetValue.cipherKey;
@@ -234,9 +237,12 @@ utils.queryTransactionByID = async (trId) => {
         
         const symKey = Kyber_Decrypt(cipherKey, secretKeyDoc.data().sk, keySize);
         const symBuffer = Buffer.from(symKey);
-        const decipher = Crypto.createDecipher('aes256', symBuffer);    
+        const decipher = Crypto.createDecipher('aes256', symBuffer);   
         let decrypted = decipher.update(productDetails, 'hex', 'utf8');
         decrypted += decipher.final('utf8');
+
+        // const endTime  = performance.now();
+        // console.log('Time elapsed: ', (endTime - beginTime) / 1000);
 
         return Promise.resolve({
             status: "Successfully read product by transaction ID",
@@ -307,7 +313,7 @@ utils.registerUser = async (userid, userpwd, usertype, adminIdentity) => {
 
 utils.enrollUser = async (userid, userpwd, usertype) => {
     console.log("\n------------  utils.enrollUser -----------------");
-    console.log("userid: " + userid + ", pwd: " + userpwd + ", usertype:" + usertype);
+    console.log("userid: " + userid + ", pwd: " + userpwd);
 
     // get certificate authority
     const orgs = ccp.organizations;
@@ -319,13 +325,7 @@ utils.enrollUser = async (userid, userpwd, usertype) => {
     var newUserDetails = {
         enrollmentID: userid,
         enrollmentSecret: userpwd,
-        profile: 'tls',
-        attrs: [
-            {
-                "name": "usertype", // application role
-                "value": usertype,
-                "ecert": true
-            }]
+        profile: 'tls'
     };
 
     return ca.enroll(newUserDetails).then(enrollment => {
