@@ -131,7 +131,7 @@ class ProductContract extends Contract {
         
         const product = Product.deserializeProduct(JSON.stringify(productDetails));
         const cipherProduct = await this.encrypt(JSON.stringify(product), 'product', keySize);
-        await ctx.stub.putState(product.getProductCode(), Product.toBuffer(product));
+        await ctx.stub.putState(product.getProductCode(), Product.toBuffer(cipherProduct));
         await ctx.stub.setEvent(EVENT_NAME, Product.toBuffer(cipherProduct));
 
         return {
