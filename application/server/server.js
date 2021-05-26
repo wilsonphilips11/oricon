@@ -4,10 +4,12 @@
 const express = require('express');
 const app = express();
 const cors = require('cors');
+const bodyParser = require('body-parser');
 const utils = require('./utils.js');
 const productAuthenticationRoute = require('./productAuthentication.js');
 
 // Start up the Express functions to listen on server side
+app.use(bodyParser.json({limit: '5mb'}));
 app.use(express.json());
 app.use(function (req, res, next) {
     res.header("Access-Control-Allow-Origin", "*");
