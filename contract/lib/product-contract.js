@@ -19,7 +19,7 @@ const allowanceKeyPrefix = 'allowance';
 
 // Token Init
 const tokenName = 'Product Authentication Token';
-const tokenSymbol = 'XYZ';
+const tokenSymbol = 'ORC';
 const tokenDecimals = 3;
 const tokenTotalSupply = 0;
 
@@ -588,6 +588,8 @@ class ProductContract extends Contract {
         const userid = await this.getCurrentUserId(ctx);
         if (userid === "admin") {
             return userid;
+        } else if (userid.includes("@org1.example.com")) {
+            return 'admin';
         }
         
         return ctx.clientIdentity.getAttributeValue("usertype");
@@ -704,7 +706,7 @@ class ProductContract extends Contract {
             }
         };
 
-        if (userId === 'admin') {
+        if (userId === 'Admin@org1.example.com') {
             response.result['totalSupply'] = totalSupply;
         }
 
