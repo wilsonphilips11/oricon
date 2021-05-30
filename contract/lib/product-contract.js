@@ -30,6 +30,17 @@ const db = fire.firestore();
 // Transaction Fee
 const txFee = 1;
 
+const { PerformanceObserver, performance } = require('perf_hooks');
+let encryptTimeArray = [];
+let decryptTimeArray = [];
+let productSizeBeforeEncryptArray = [];
+let productSizeBeforeDecryptArray = [];
+let encryptedProductSizeArray = [];
+let decryptedProductSizeArray = [];
+let symmetricKeySizeArray = [];
+let cipherKeySizeArray = [];
+let keySizeArray = [];
+
 class ProductContext extends Context {
     
     constructor() {
@@ -49,13 +60,20 @@ class ProductContract extends Contract {
     }
 
     async encrypt(data, objectType, keySize = 768) {
-        const cipher_symKey = await this.pqEncrypt(keySize);
+        const cipher_symKey = await this.encap(keySize);
         const symBuffer = Buffer.from(cipher_symKey[1]);
         
         const cipher = Crypto.createCipher('aes256', symBuffer);  
         let encrypted = cipher.update(data, 'utf8', 'hex');
         encrypted += cipher.final('hex');
-            
+          
+        if (objectType == 'product') {
+            cipherKeySizeArray.push(cipher_symKey[0].length);
+            symmetricKeySizeArray.push(cipher_symKey[1].length);
+            console.log('cipherKeySize in pqEncrypt: ', cipher_symKey[0].length);
+            console.log('symmetricKeySize in pqEncrypt: ', cipher_symKey[1].length);
+        }
+        
         return {
             'detail': encrypted,
             'cipherKey': cipher_symKey[0],
@@ -65,7 +83,7 @@ class ProductContract extends Contract {
     }
 
     async decrypt(data, keySize = 768) {
-        const symKey = await this.pqDecrypt(data.cipherKey, keySize);
+        const symKey = await this.decap(data.cipherKey, keySize);
         const symBuffer = Buffer.from(symKey);
         
         const decipher = Crypto.createDecipher('aes256', symBuffer);   
@@ -75,18 +93,18 @@ class ProductContract extends Contract {
         return decrypted.toString();
     }
 
-    async pqEncrypt(keySize) {
+    async encap(keySize) {
         const publicKeyRef = db.collection('kyber-key').doc(`pk-K${keySize}`);
         const publicKeyDoc = await publicKeyRef.get();
         if (!publicKeyDoc.exists) {
             throw new Error(`pk-K${keySize} not found!`);
         }
         const cipher_symKey = Kyber_Encrypt(publicKeyDoc.data().pk, keySize);
-        
+
         return cipher_symKey;
     }
 
-    async pqDecrypt(cipherKey, keySize) {
+    async decap(cipherKey, keySize) {
         const secretKeyRef = db.collection('kyber-key').doc(`sk-K${keySize}`);
         const secretKeyDoc = await secretKeyRef.get();
         if (!secretKeyDoc.exists) {
@@ -130,14 +148,246 @@ class ProductContract extends Contract {
         }
         
         const product = Product.deserializeProduct(JSON.stringify(productDetails));
-        // const cipherProduct = await this.encrypt(JSON.stringify(product), 'product', keySize);
-        await ctx.stub.putState(product.getProductCode(), Product.toBuffer(product));
+        const cipherProduct = await this.encrypt(JSON.stringify(product), 'product', keySize);
+        await ctx.stub.putState(product.getProductCode(), Product.toBuffer(cipherProduct));
         await ctx.stub.setEvent(EVENT_NAME, Product.toBuffer(cipherProduct));
 
         return {
             status: 'Successfully create a product',
             result: cipherProduct
         };
+    }
+
+    async kyberEncryptTest(ctx, args) {
+        console.log('===============================');
+        console.log('kyberEncryptTest');
+        console.log('===============================');
+
+        const JSONOriginalSize = Buffer.byteLength(args);
+        console.log('original JSON length: ', JSONOriginalSize);
+
+        const productDetails = JSON.parse(args);
+
+        const keySize = productDetails.keySize;
+        keySizeArray.push(keySize);
+
+        const product = Product.deserializeProduct(JSON.stringify(productDetails));
+        const productSize = Buffer.byteLength(JSON.stringify(product));
+        console.log('product JSON Stringify: ', JSON.stringify(product));
+        console.log('product stringify length: ', Buffer.byteLength(JSON.stringify(product)));
+        console.log('');
+
+        const startTime = performance.now();
+        const cipherProduct = await this.encrypt(JSON.stringify(product), 'product', keySize);
+        const endTime = performance.now();
+
+        const encryptedDetail = cipherProduct.detail;
+
+        const encryptedProductSize = Buffer.byteLength(encryptedDetail);
+        console.log('encryptedProductSize: ', encryptedProductSize);
+
+
+        const timeElapsed = (endTime - startTime)/1000;
+        console.log('timeElapsed (s): ', timeElapsed);
+        encryptTimeArray.push(timeElapsed);
+        productSizeBeforeEncryptArray.push(productSize);
+        encryptedProductSizeArray.push(encryptedProductSize);
+        console.log('encryptTimeArray (s): ', encryptTimeArray);
+        console.log('productSizeBeforeEncryptArray (Bytes): ', productSizeBeforeEncryptArray);
+        console.log('encryptedProductSizeArray (Bytes): ', encryptedProductSizeArray);
+
+        return {
+            status: 'Successfully encrypt a product',
+            encryptTime: timeElapsed,
+            JSONOriginalSize: JSONOriginalSize,
+            productSize: productSize,
+            encryptedProductSize: encryptedProductSize,
+            result: cipherProduct
+        };
+    }
+
+    async kyberDecryptTest(ctx, args) {
+        console.log('===============================');
+        console.log('kyberDecryptTest');
+        console.log('===============================');
+
+        const productDetails = JSON.parse(args);
+        console.log('productDetails JSON Stringify: ', JSON.stringify(productDetails));
+        console.log('productDetails stringify length: ', Buffer.byteLength(JSON.stringify(productDetails)));
+        console.log('');
+
+        const keySize = productDetails.keySize;
+        const detail = productDetails.detail;
+        
+        const productDetailsSize = Buffer.byteLength(JSON.stringify(productDetails));
+        const productSize = Buffer.byteLength(detail);
+      
+        const startTime = performance.now();
+        const plainProduct = await this.decrypt(productDetails, keySize);
+        const endTime = performance.now();
+
+        const product = Product.deserializeProduct(plainProduct);
+        const decryptedProductSize = Buffer.byteLength(JSON.stringify(product));
+
+        const timeElapsed = (endTime - startTime)/1000;
+        console.log('timeElapsed (s): ', timeElapsed);
+        decryptTimeArray.push(timeElapsed);
+        productSizeBeforeDecryptArray.push(productSize);
+        decryptedProductSizeArray.push(decryptedProductSize);
+        console.log('decryptTimeArray (s): ', decryptTimeArray);
+        console.log('productSizeBeforeDecryptArray (Bytes): ', productSizeBeforeDecryptArray);
+        console.log('decryptedProductSizeArray (Bytes): ', decryptedProductSizeArray);
+
+        return {
+            status: 'Successfully decrypt a product',
+            decryptTime: timeElapsed,
+            productSize: productSize,
+            decryptedProductSize: decryptedProductSize,
+            result: product
+        };
+    }
+
+    async kyberEncDecTest(ctx, args) {
+        console.log('===============================');
+        console.log('kyberEncryptTest');
+        console.log('===============================');
+
+        const JSONOriginalSize = Buffer.byteLength(args);
+        console.log('original JSON length: ', JSONOriginalSize);
+
+        const productDetails = JSON.parse(args);
+
+        const keySize = productDetails.keySize;
+        keySizeArray.push(keySize);
+
+        const productBeforeEncrypt = Product.deserializeProduct(JSON.stringify(productDetails));
+        const productSizeBeforeEncrypt = Buffer.byteLength(JSON.stringify(productBeforeEncrypt));
+        console.log('product JSON Stringify: ', JSON.stringify(productBeforeEncrypt));
+        console.log('product stringify length: ', Buffer.byteLength(JSON.stringify(productBeforeEncrypt)));
+        console.log('');
+
+        const encryptStartTime = performance.now();
+        const cipherProduct = await this.encrypt(JSON.stringify(productBeforeEncrypt), 'product', keySize);
+        const encryptEndTime = performance.now();
+
+        const encryptedDetail = cipherProduct.detail;
+        console.log('encryptedDetail: ', encryptedDetail);
+        const encryptedCipherKey = cipherProduct.cipherKey;
+        console.log('encryptedCipherKey: ', encryptedCipherKey);
+
+        const encryptedProductSize = Buffer.byteLength(encryptedDetail);
+        console.log('encryptedProductSize: ', encryptedProductSize);
+
+        const encryptTimeElapsed = (encryptEndTime - encryptStartTime)/1000;
+        console.log('timeElapsed (s): ', encryptTimeElapsed);
+        encryptTimeArray.push(encryptTimeElapsed);
+        productSizeBeforeEncryptArray.push(productSizeBeforeEncrypt);
+        encryptedProductSizeArray.push(encryptedProductSize);
+        console.log('encryptTimeArray (s): ', encryptTimeArray);
+        console.log('productSizeBeforeEncryptArray (Bytes): ', productSizeBeforeEncryptArray);
+        console.log('encryptedProductSizeArray (Bytes): ', encryptedProductSizeArray);
+
+        console.log('===============================');
+        console.log('kyberDecryptTest');
+        console.log('===============================');
+
+        const detail = cipherProduct.detail;
+        
+        const productSizeBeforeDecrypt = Buffer.byteLength(detail);
+      
+        const decryptStartTime = performance.now();
+        const plainProduct = await this.decrypt(cipherProduct, keySize);
+        const decryptEndTime = performance.now();
+
+        const product = Product.deserializeProduct(plainProduct);
+        const decryptedProductSize = Buffer.byteLength(JSON.stringify(product));
+
+        const decryptTimeElapsed = (decryptEndTime - decryptStartTime)/1000;
+        console.log('timeElapsed (s): ', decryptTimeElapsed);
+        decryptTimeArray.push(decryptTimeElapsed);
+        productSizeBeforeDecryptArray.push(productSizeBeforeDecrypt);
+        decryptedProductSizeArray.push(decryptedProductSize);
+        console.log('decryptTimeArray (s): ', decryptTimeArray);
+        console.log('productSizeBeforeDecryptArray (Bytes): ', productSizeBeforeDecryptArray);
+        console.log('decryptedProductSizeArray (Bytes): ', decryptedProductSizeArray);
+
+        return {
+            status: 'Successfully encrypt & decrypt a product',
+            encryptionResult: {
+                encryptTime: encryptTimeElapsed,
+                JSONOriginalSize: JSONOriginalSize,
+                productSizeBeforeEncrypt: productSizeBeforeEncrypt,
+                encryptedProductSize: encryptedProductSize,
+            },
+            decryptionResult: {
+                decryptTime: decryptTimeElapsed,
+                productSizeBeforeDecrypt: productSizeBeforeDecrypt,
+                decryptedProductSize: decryptedProductSize,
+            },
+            cipherProduct: cipherProduct,
+            plainProduct: product
+        };
+    }
+
+    async printTestingResult(ctx) {
+        let sumArray = 0;
+        
+        for(let iterator = 0; iterator < encryptTimeArray.length; iterator++) {
+            sumArray += encryptTimeArray[iterator];
+        }
+        const encryptAvgTimeArray = sumArray / encryptTimeArray.length;
+        
+        sumArray = 0;
+        
+        for(let iterator = 0; iterator < decryptTimeArray.length; iterator++) {
+            sumArray += decryptTimeArray[iterator];
+        }
+        const decryptAvgTimeArray = sumArray / decryptTimeArray.length;
+
+        return {
+            status: 'Successfully Printing Enc/Dec Result',
+            encryptResult: {
+                encryptAverageTime : encryptAvgTimeArray,
+                encryptTestQuantity : encryptTimeArray.length,
+                encryptTimeArray : encryptTimeArray,
+                productSizeBeforeEncryptArray : productSizeBeforeEncryptArray,
+                encryptedProductSizeArray : encryptedProductSizeArray,
+            },
+            decryptResult: {
+                decryptAverageTime : decryptAvgTimeArray,
+                decryptTestQuantity : decryptTimeArray.length,
+                decryptTimeArray : decryptTimeArray,
+                productSizeBeforeDecryptArray : productSizeBeforeDecryptArray,
+                decryptedProductSizeArray : decryptedProductSizeArray,
+            },
+            symmetricKeySizeArray: symmetricKeySizeArray,
+            cipherKeySizeArray: cipherKeySizeArray,
+            keySizeArray: keySizeArray
+        };
+    }
+
+    async kyberDeleteData(ctx) {
+        encryptTimeArray = [];
+        decryptTimeArray = [];
+        productSizeBeforeEncryptArray = [];
+        productSizeBeforeDecryptArray = [];
+        encryptedProductSizeArray = [];
+        decryptedProductSizeArray = [];
+        symmetricKeySizeArray = [];
+        cipherKeySizeArray = [];
+        keySizeArray = [];
+
+        return {
+            encryptTimeArray,
+            decryptTimeArray,
+            productSizeBeforeEncryptArray,
+            productSizeBeforeDecryptArray,
+            encryptedProductSizeArray,
+            decryptedProductSizeArray,
+            symmetricKeySizeArray,
+            cipherKeySizeArray,
+            keySizeArray,
+        }
     }
 
     async readProduct(ctx, productCode, keySize) {

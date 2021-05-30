@@ -85,7 +85,7 @@ let KyberPKBytes = Kyber512PKBytes;
 let KyberCTBytes = Kyber512CTBytes;
 
 exports.changeParams = (newParams) => {
-  console.log('function changeParams in Kyber768: ', newParams);
+//   console.log('function changeParams in Kyber768: ', newParams);
   if (newParams == 512) {
     paramsK = paramsKK512;
     paramsPolyvecBytes = paramsPolyvecBytesK512;

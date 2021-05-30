@@ -12,6 +12,9 @@ const INVALID_HEADER = 1001;
 const SUCCESS = 0;
 const PRODUCT_NOT_FOUND = 2000;
 
+// // xlsx module
+const reader = require('xlsx');
+
 async function getUsernamePassword(request) {
     if (!request.headers.authorization || request.headers.authorization.indexOf('Basic ') === -1) {
         return new Promise().reject('Missing Authorization Header');
@@ -83,6 +86,166 @@ async function evalTx(request, txName, ...args) {
         return Promise.reject(error);
     }
 }
+
+///////////////////////////////////////////////////////////////
+//               UJI PERFORMANCE WAKTU KYBER                 //
+///////////////////////////////////////////////////////////////
+productAuthenticationRouter.route('/kyber/encryption').post(function (request, response) {
+    evalTx(request, 'kyberEncryptTest', JSON.stringify(request.body))
+        .then((result) => {
+            console.log('\nProcess kyberEncryptTest.');
+            response.status(STATUS_SUCCESS);
+            response.send(result);
+        }, (error) => {
+            response.status(STATUS_SERVER_ERROR);
+            response.send(utils.prepareErrorResponse(error, STATUS_SERVER_ERROR,
+                "There was a problem encrypting the product."));
+        });
+});
+
+productAuthenticationRouter.route('/kyber/decryption').post(function (request, response) {
+    evalTx(request, 'kyberDecryptTest', JSON.stringify(request.body))
+        .then((result) => {
+            console.log('\nProcess kyberDecryptTest.');
+            response.status(STATUS_SUCCESS);
+            response.send(result);
+        }, (error) => {
+            response.status(STATUS_SERVER_ERROR);
+            response.send(utils.prepareErrorResponse(error, STATUS_SERVER_ERROR,
+                "There was a problem decrypting the product."));
+        });
+});
+
+productAuthenticationRouter.route('/kyber/encryptDecrypt').post(function (request, response) {
+    evalTx(request, 'kyberEncDecTest', JSON.stringify(request.body))
+        .then((result) => {
+            console.log('\nProcess kyberEncDecTest.');
+            response.status(STATUS_SUCCESS);
+            response.send(result);
+        }, (error) => {
+            response.status(STATUS_SERVER_ERROR);
+            response.send(utils.prepareErrorResponse(error, STATUS_SERVER_ERROR,
+                "There was a problem EncDec the product."));
+        });
+});
+
+productAuthenticationRouter.route('/kyber/printTestingResult').get(function (request, response) {
+    evalTx(request, 'printTestingResult')
+        .then((result) => {
+            console.log('\nProcess printTestingResult transaction.');
+            response.status(STATUS_SUCCESS);
+            response.send(result);
+            
+            result = JSON.parse(result);
+            
+            const keySize = [512, 768, 1024];
+
+            let key512Data = {
+                '25': [],
+                '50': [],
+                '75': [],
+                '100': [],
+            };
+            let key768Data = {
+                '25': [],
+                '50': [],
+                '75': [],
+                '100': [],
+            };
+            let key1024Data = {
+                '25': [],
+                '50': [],
+                '75': [],
+                '100': [],
+            };
+
+            console.log('keySizeArray length: ', result.keySizeArray.length);
+
+            for(let iterator = 0; iterator < result.keySizeArray.length; iterator++) {
+                let newObject = {
+                    productSizeBeforeEncrypt: result.encryptResult.productSizeBeforeEncryptArray[iterator],
+                    encryptedProductSize: result.encryptResult.encryptedProductSizeArray[iterator],
+                    encryptTime: result.encryptResult.encryptTimeArray[iterator],
+                    productSizeBeforeDecrypt: result.decryptResult.productSizeBeforeDecryptArray[iterator],
+                    decryptedProductSize: result.decryptResult.decryptedProductSizeArray[iterator],
+                    decryptTime: result.decryptResult.decryptTimeArray[iterator],
+                    symmetricKeySize: result.symmetricKeySizeArray[iterator],
+                    cipherKeySize: result.cipherKeySizeArray[iterator],
+                    keySize: result.keySizeArray[iterator],
+                }
+
+                let JSONSize = result.encryptResult.productSizeBeforeEncryptArray[iterator]/1024;
+
+                if (JSONSize < 50) {
+                    JSONSize = 25;
+                } else if (JSONSize < 75) {
+                    JSONSize = 50;
+                } else if (JSONSize < 100) {
+                    JSONSize = 75;
+                } else {
+                    JSONSize = 100;
+                }
+
+                if (newObject.keySize == 512) {
+                    key512Data[JSONSize].push(newObject);
+                } else if (newObject.keySize == 768) {
+                    key768Data[JSONSize].push(newObject);
+                } else if (newObject.keySize == 1024) {
+                    key1024Data[JSONSize].push(newObject);
+                }
+            }
+
+            console.log('key512Data: ', key512Data);
+            console.log('key768Data: ', key768Data);
+            console.log('key1024Data: ', key1024Data);
+            console.log('');
+
+            let dataSizeArray = [25, 50, 75, 100];
+
+            for (let sizeIterator = 0; sizeIterator < dataSizeArray.length; sizeIterator++) {
+                const dataSize = dataSizeArray[sizeIterator];
+                const filename = './uji' + dataSize + 'KB.xlsx';
+
+                for(let iterator = 0; iterator < keySize.length; iterator++) {
+                    const file = reader.readFile(filename);
+                    let worksheet = file.Sheets[keySize[iterator]];
+    
+                    if (iterator == 0) {
+                        console.log('key512Data[',dataSize,']: ', key512Data[dataSize]);
+                        reader.utils.sheet_add_json(worksheet, key512Data[dataSize]);
+                    } else if (iterator == 1) {
+                        console.log('key768Data[',dataSize,']: ', key768Data[dataSize]);
+                        reader.utils.sheet_add_json(worksheet, key768Data[dataSize]);
+                    } else if (iterator == 2) {
+                        console.log('key1024Data[',dataSize,']: ', key1024Data[dataSize]);
+                        reader.utils.sheet_add_json(worksheet, key1024Data[dataSize]);
+                    }
+                    reader.writeFile(file,filename);
+                }
+            }
+
+
+        }, (error) => {
+            response.status(STATUS_SERVER_ERROR);
+            response.send(utils.prepareErrorResponse(error, STATUS_SERVER_ERROR,
+                "There was a problem printGlobalVariable."));
+        });
+});
+
+productAuthenticationRouter.route('/kyber/deleteData').get(function (request, response) {
+    evalTx(request, 'kyberDeleteData')
+        .then((result) => {
+            console.log('\nProcess kyberDeleteData transaction.');
+            response.status(STATUS_SUCCESS);
+            response.send(result);
+        }, (error) => {
+            response.status(STATUS_SERVER_ERROR);
+            response.send(utils.prepareErrorResponse(error, STATUS_SERVER_ERROR,
+                "There was a problem Delete the product."));
+        });
+});
+
+///////////////////////////////////////////////////////////////
 
 productAuthenticationRouter.route('/create-product').post(function (request, response) {
     submitTx(request, 'createProduct', JSON.stringify(request.body))
