@@ -209,7 +209,6 @@ utils.queryTransactionByID = async (trId) => {
     const channel = client.getChannel(configdata["channel_name"]);
     const peers = channel.getChannelPeers();
 
-    // const beginTime  = performance.now();
     let response_payload = channel.queryTransaction(trId, peers[0].getName());
     return response_payload.then(async response => {
         const writeSet = response.transactionEnvelope
@@ -225,30 +224,33 @@ utils.queryTransactionByID = async (trId) => {
                             .rwset
                             .writes[2];
         const writeSetValue = JSON.parse(writeSet.value);
-        const productDetails = writeSetValue.detail;
-        const cipherKey = writeSetValue.cipherKey;
-        const keySize = writeSetValue.keySize;
+        // const productDetails = writeSetValue.detail;
+        // const cipherKey = writeSetValue.cipherKey;
+        // const keySize = writeSetValue.keySize;
 
-        const secretKeyRef = db.collection('kyber-key').doc(`sk-K${keySize}`);
-        const secretKeyDoc = await secretKeyRef.get();
-        if (!secretKeyDoc.exists) {
-            throw new Error(`sk-K${keySize} not found!`);
-        }
+        // const secretKeyRef = db.collection('kyber-key').doc(`sk-K${keySize}`);
+        // const secretKeyDoc = await secretKeyRef.get();
+        // if (!secretKeyDoc.exists) {
+        //     throw new Error(`sk-K${keySize} not found!`);
+        // }
         
-        const symKey = Kyber_Decrypt(cipherKey, secretKeyDoc.data().sk, keySize);
-        const symBuffer = Buffer.from(symKey);
-        const decipher = Crypto.createDecipher('aes256', symBuffer);   
-        let decrypted = decipher.update(productDetails, 'hex', 'utf8');
-        decrypted += decipher.final('utf8');
-
-        // const endTime  = performance.now();
-        // console.log('Time elapsed: ', (endTime - beginTime) / 1000);
+        // const symKey = Kyber_Decrypt(cipherKey, secretKeyDoc.data().sk, keySize);
+        // const symBuffer = Buffer.from(symKey);
+        // const decipher = Crypto.createDecipher('aes256', symBuffer);   
+        // let decrypted = decipher.update(productDetails, 'hex', 'utf8');
+        // decrypted += decipher.final('utf8');
 
         return Promise.resolve({
             status: "Successfully read product by transaction ID",
             isDeleted: writeSet.is_delete,
-            result: JSON.parse(decrypted.toString())
+            result: writeSetValue
         });
+
+        // return Promise.resolve({
+        //     status: "Successfully read product by transaction ID",
+        //     isDeleted: writeSet.is_delete,
+        //     result: JSON.parse(decrypted.toString())
+        // });
     },(error) =>
         {
             console.log ('utils.js: Error:' + error.toString());

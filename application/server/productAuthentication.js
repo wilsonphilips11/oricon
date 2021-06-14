@@ -84,6 +84,25 @@ async function evalTx(request, txName, ...args) {
     }
 }
 
+productAuthenticationRouter.route('/authenticate-user').get(function (request, response) {
+    try {
+        getUsernamePassword(request)
+            .then(() => {
+                response.status(STATUS_SUCCESS);
+                response.send({
+                    status: 'User is authenticated!'
+                });
+            }, error => {
+                response.status(STATUS_CLIENT_ERROR);
+                response.send(utils.prepareErrorResponse(error, USER_NOT_ENROLLED,
+                    "Verify if the user is credential is valid."));
+            });
+    } catch (error) {
+        response.status(STATUS_SERVER_ERROR);
+        response.send(utils.prepareErrorResponse(error, STATUS_SERVER_ERROR, "Internal server error."));
+    }
+});
+
 productAuthenticationRouter.route('/create-product').post(function (request, response) {
     submitTx(request, 'createProduct', JSON.stringify(request.body))
         .then((result) => {
