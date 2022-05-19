@@ -1,0 +1,33 @@
+<ion-header>
+  <ion-toolbar>
+    <ion-buttons slot="start">
+      <ion-back-button></ion-back-button>
+    </ion-buttons>
+    <ion-title>Product History</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content class="ion-margin-top" color="dark">
+  <ion-grid fixed="true">
+    <ion-row class="ion-justify-content-center">
+      <ion-col size-sm="6">
+        <div class="list-item" *ngFor="let history of productHistory">
+          <img [src]="history.Value.productImageBase64"/>
+          <div class="info">
+            <ion-label>
+              <p>{{ history.Timestamp }}</p>
+              <h4 style="font-weight: bold; margin-bottom: 10px">{{ history.Value.productName }}</h4>
+              <p>Price       : {{ history.Value.productPrice | currency:'IDR':'symbol-narrow':'3.0' }}</p>
+              <p>Origin      : {{ history.Value.productOrigin }}</p>
+              <p>ReleaseDate : {{ history.Value.productReleaseDate }}</p>
+              <p>Description :</p>
+            </ion-label>
+            <ion-textarea readonly
+              [value]="history.Value.productDescription">
+            </ion-textarea>
+          </div>
+        </div>
+      </ion-col>
+    </ion-row>
+  </ion-grid>
+</ion-content>

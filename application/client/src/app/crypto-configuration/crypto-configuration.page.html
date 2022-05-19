@@ -1,0 +1,40 @@
+<ion-header>
+  <ion-toolbar>
+    <ion-title>
+      <ion-img class="ion-margin-vertical logo" src="assets/icon/Oricon.png"></ion-img>
+    </ion-title>
+    <ion-buttons slot="end">
+      <ion-button (click)="onLogout()">
+        <ion-label>Logout</ion-label>
+        <ion-icon name="log-out-outline"></ion-icon>
+      </ion-button>
+    </ion-buttons>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content color="dark">
+  <ion-list class="ion-margin">
+    <ion-radio-group value="{{ checkedValue }}" (ionChange)="changeParameter($event)">
+      <ion-list-header>
+        <ion-label>Chosen Kyber Security Parameter</ion-label>
+      </ion-list-header>
+
+      <ion-item color="medium" lines="none">
+        <ion-label>512</ion-label>
+        <ion-radio slot="start" value="512"></ion-radio>
+      </ion-item>
+
+      <ion-item color="medium" lines="none">
+        <ion-label>768</ion-label>
+        <ion-radio slot="start" value="768"></ion-radio>
+      </ion-item>
+
+      <ion-item color="medium" lines="none">
+        <ion-label>1024</ion-label>
+        <ion-radio slot="start" value="1024"></ion-radio>
+      </ion-item>
+    </ion-radio-group>
+  </ion-list>
+<!--  <ion-button (click)="submit($event)">Submit Product with new paramater</ion-button>-->
+<!--  <ion-button (click)="delete($event)">Delete Latest Product</ion-button>-->
+</ion-content>

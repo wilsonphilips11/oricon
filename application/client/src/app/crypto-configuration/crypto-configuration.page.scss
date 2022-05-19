@@ -1,0 +1,13 @@
+.logo {
+  width: 100px;
+}
+
+ion-list{
+  border-radius: 20px;
+  background-color: #181717;
+  --ion-text-color: var(--ion-color-tertiary);
+
+  ion-radio {
+    --color-checked: var(--ion-color-warning);
+  }
+}

@@ -1,0 +1,120 @@
+test:
+  name: product-contract-benchmark
+  description: Benchmarking for VS Code sample
+  workers:
+    type: local
+    number: 2
+  rounds:
+    - label: createProduct
+      description: Create product benchmark test
+      chaincodeId: product-contract
+      txDuration: 30
+      rateControl:
+        type: fixed-backlog
+        opts:
+          unfinished_per_client: 2
+      callback: benchmarks/callbacks/product/createProductBenchmark.js
+    - label: readProduct
+      description: Read product benchmark test
+      chaincodeId: product-contract
+      txDuration: 30
+      rateControl:
+        type: fixed-backlog
+        opts:
+          unfinished_per_client: 2
+      callback: benchmarks/callbacks/product/readProductBenchmark.js
+      arguments:
+        assets: 5
+    - label: readProductHistory
+      description: Read product history benchmark test
+      chaincodeId: product-contract
+      txDuration: 30
+      rateControl:
+        type: fixed-backlog
+        opts:
+          unfinished_per_client: 2
+      callback: benchmarks/callbacks/product/readProductHistoryBenchmark.js
+      arguments:
+        assets: 5
+    - label: updateProduct
+      description: Update product benchmark test
+      chaincodeId: product-contract
+      txDuration: 30
+      rateControl:
+        type: fixed-backlog
+        opts:
+          unfinished_per_client: 2
+      callback: benchmarks/callbacks/product/updateProductBenchmark.js
+      arguments:
+        assets: 5
+    - label: deleteProduct
+      description: Delete product benchmark test
+      chaincodeId: product-contract
+      txNumber: 10
+      rateControl:
+        type: fixed-backlog
+        opts:
+          unfinished_per_client: 2
+      callback: benchmarks/callbacks/product/deleteProductBenchmark.js
+      arguments:
+        assets: 5
+    - label: getTokenDetail
+      description: Get token detail benchmark test
+      chaincodeId: product-contract
+      txDuration: 30
+      rateControl:
+        type: fixed-backlog
+        opts:
+          unfinished_per_client: 2
+      callback: benchmarks/callbacks/token/getTokenDetailBenchmark.js
+    - label: approveToken
+      description: Approve token benchmark test
+      chaincodeId: product-contract
+      txDuration: 30
+      rateControl:
+        type: fixed-backlog
+        opts:
+          unfinished_per_client: 2
+      callback: benchmarks/callbacks/token/approveTokenBenchmark.js
+    - label: getAllowanceToken
+      description: Get allowance token benchmark test
+      chaincodeId: product-contract
+      txDuration: 30
+      rateControl:
+        type: fixed-backlog
+        opts:
+          unfinished_per_client: 2
+      callback: benchmarks/callbacks/token/getAllowanceTokenBenchmark.js
+    - label: transferToken
+      description: Transfer token benchmark test
+      chaincodeId: product-contract
+      txDuration: 30
+      rateControl:
+        type: fixed-backlog
+        opts:
+          unfinished_per_client: 2
+      callback: benchmarks/callbacks/token/transferTokenBenchmark.js
+    - label: transferFromToken
+      description: Transfer from token benchmark test
+      chaincodeId: product-contract
+      txDuration: 30
+      rateControl:
+        type: fixed-backlog
+        opts:
+          unfinished_per_client: 2
+      callback: benchmarks/callbacks/token/transferFromTokenBenchmark.js
+    - label: mintToken
+      description: Mint token benchmark test
+      chaincodeId: product-contract
+      txDuration: 30
+      rateControl:
+        type: fixed-backlog
+        opts:
+          unfinished_per_client: 2
+      callback: benchmarks/callbacks/token/mintTokenBenchmark.js
+monitor:
+  type:
+  - none
+observer:
+  type: local
+  interval: 5
