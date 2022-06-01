@@ -13,6 +13,7 @@ Product authentication blockchain-app to register original products and verify t
   * Manage products (create, update, soft delete, and view updates history)
   * Show all users and register new users
 
+## Demo
 <br>
 <p align="center">
   <img src="docs/1.PNG" width="25%">
