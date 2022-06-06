@@ -1,7 +1,0 @@
-{
-  "name": "product-authentication",
-  "integrations": {
-    "capacitor": {}
-  },
-  "type": "angular"
-}
