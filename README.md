@@ -45,3 +45,7 @@ Product authentication blockchain-app to register original products and verify t
   <img src="docs/12.PNG" width="25%">
 </p>
 <br>
+
+## Contributors
+* Kevin Hendy
+* Wilson Philips
