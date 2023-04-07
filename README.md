@@ -1,6 +1,5 @@
 ## Oricon
-Product authentication blockchain-app to register original products and verify them through QR codes build using Hyperledger Fabric, Express.js, and Ionic (Angular).
-
+Product authentication blockchain-app to register original products and verify them through QR codes build using Hyperledger Fabric, Express.js, and Ionic Angular.
 
 ## Features
 * QR Code Scanner
